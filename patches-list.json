@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.0.0",
+  "version": "1.1.0-dev.1",
   "patches": [
     {
       "name": "Endless Fall & 3-Lives",
@@ -32,32 +32,27 @@
       "options": []
     },
     {
-      "name": "Example Patch",
-      "description": "Example patch to start with.",
+      "name": "Foldable Seamless Wide View",
+      "description": "Zooms out wide/unfolded screens (such as Galaxy Z Fold / 4:3 tablets) to full tall portrait vertical visibility (~600 logical height), centers UI cleanly without 4:3 overlap, remaps touch input, and fills the side margins with seamless cylindrical wrap-around rendering of the playfield.",
       "default": true,
       "category": null,
       "compatiblePackages": [
         {
-          "packageName": "com.example.app",
-          "name": "XYZ app",
+          "packageName": "com.lima.doodlejump",
+          "name": "Doodle Jump",
           "description": null,
           "apkFileType": "APK",
-          "appIconColor": "#FF0045",
+          "appIconColor": "#7EC850",
           "signatures": null,
           "formFactor": "MOBILE",
           "targets": [
             {
-              "version": "2.0.0",
-              "versionCodes": null,
+              "version": "3.11.40",
+              "versionCodes": {
+                "ARM64_V8A": 3920090
+              },
               "isExperimental": false,
-              "minSdk": null,
-              "description": null
-            },
-            {
-              "version": "1.0.2",
-              "versionCodes": null,
-              "isExperimental": false,
-              "minSdk": null,
+              "minSdk": 24,
               "description": null
             }
           ]
