@@ -122,9 +122,9 @@ inline void render_overlay(int lives, int max_lives, int peak_score,
         draw_rect(screen_left, 0.0f, screen_width, screen_height, 0.95f, 0.12f, 0.12f, a);
     }
 
-    // Top-left below the vanilla top score bar (~38px down from safe top)
-    float top_y = screen_height - top_inset - 46.0f;
-    float base_x = screen_left + 16.0f;
+    // Place lives + peak score cleanly inside the vanilla top HUD bar (between score and pause)
+    float bar_center_y = screen_height - top_inset - 21.0f;
+    float icons_x = screen_left + 118.0f;
 
     // Blink icons gently while invulnerable
     float icon_alpha = 1.0f;
@@ -133,15 +133,15 @@ inline void render_overlay(int lives, int max_lives, int peak_score,
     }
 
     for (int i = 0; i < max_lives; ++i) {
-        draw_mini_doodler(base_x + i * 20.0f, top_y, 0.78f, i < lives, icon_alpha);
+        draw_mini_doodler(icons_x + i * 19.0f, bar_center_y - 1.0f, 0.72f, i < lives, icon_alpha);
     }
 
-    // Peak score label just below the lives icons
+    // Peak score label neatly inside the right-center of the top bar (left of pause button)
     char buf[32];
     std::snprintf(buf, sizeof(buf), "PEAK:%d", peak_score);
-    // Small dark backing pill for readability on any theme
-    draw_rect(screen_left + 6.0f, top_y - 22.0f, 92.0f, 13.0f, 0.0f, 0.0f, 0.0f, 0.32f);
-    draw_text_3x5(buf, screen_left + 10.0f, top_y - 20.0f, 1.8f, 1.0f, 0.92f, 0.30f, 0.95f);
+    float peak_x = screen_left + 178.0f;
+    draw_rect(peak_x - 3.0f, bar_center_y - 6.0f, 88.0f, 13.0f, 0.0f, 0.0f, 0.0f, 0.28f);
+    draw_text_3x5(buf, peak_x, bar_center_y - 4.0f, 1.75f, 1.0f, 0.92f, 0.30f, 0.98f);
 
     // Restore GLES 1.1 state
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
