@@ -1,3 +1,9 @@
+## [1.1.0-dev.4](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0-dev.3...v1.1.0-dev.4) (2026-11-22)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** link libc++ statically so libDoodleJump.so has no libc++_shared.so dependency ([320246e](https://github.com/Darkaxt/morphe-patches/commit/320246e6a2c3b7d4b8e97ef16fc8d26b32731266))
+
 ## [1.1.0-dev.3](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0-dev.2...v1.1.0-dev.3) (2026-11-22)
 
 ### 🐛 Bug Fixes
