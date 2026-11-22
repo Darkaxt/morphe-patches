@@ -1,5 +1,35 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "0.0.0",
-  "patches": []
+  "version": "1.0.0-dev.1",
+  "patches": [
+    {
+      "name": "Endless Fall & 3-Lives",
+      "description": "Replaces instant fall-death with continuous falling onto previous platforms with live score reduction, adds a 3-lives HUD system with balanced fall damage and monster/UFO damage with brief invulnerability, and tracks Peak Score. Black Holes remain instant Game Over.",
+      "default": true,
+      "category": null,
+      "compatiblePackages": [
+        {
+          "packageName": "com.lima.doodlejump",
+          "name": "Doodle Jump",
+          "description": null,
+          "apkFileType": "APK",
+          "appIconColor": "#7EC850",
+          "signatures": null,
+          "formFactor": "MOBILE",
+          "targets": [
+            {
+              "version": "3.11.40",
+              "versionCodes": {
+                "ARM64_V8A": 3920090
+              },
+              "isExperimental": false,
+              "minSdk": 24,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    }
+  ]
 }

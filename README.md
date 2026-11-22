@@ -17,9 +17,11 @@ Click the button below, or manually add this repo URL to Morphe Manager: `https:
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
+> **[v1.0.0-dev.1](https://github.com/Darkaxt/morphe-patches/releases/tag/v1.0.0-dev.1)**&nbsp;&nbsp;&middot;&nbsp;&nbsp;`dev`&nbsp;&nbsp;&middot;&nbsp;&nbsp;**1 patches** across **1 apps**&nbsp;&nbsp;&middot;&nbsp;&nbsp;[Full details](PATCHES.md)
 
-#### A list of patches will automatically be shown here after the first release is created.
-
+| # | App | Patches | Version | Package |
+|---|---|---|---|---|
+| 1 | [**Doodle Jump**](PATCHES.md#doodle-jump-comlimadoodlejump) | 1 | `3.11.40` | [`com.lima.doodlejump`](https://play.google.com/store/apps/details?id=com.lima.doodlejump) |
 <!-- PATCHES_END -->
 
 ### 🛠️ Building locally
