@@ -17,12 +17,11 @@ Click the button below, or manually add this repo URL to Morphe Manager: `https:
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.0.0](https://github.com/Darkaxt/morphe-patches/releases/tag/v1.0.0)**&nbsp;&nbsp;&middot;&nbsp;&nbsp;`main`&nbsp;&nbsp;&middot;&nbsp;&nbsp;**2 patches** across **2 apps**&nbsp;&nbsp;&middot;&nbsp;&nbsp;[Full details](PATCHES.md)
+> **[v1.1.0](https://github.com/Darkaxt/morphe-patches/releases/tag/v1.1.0)**&nbsp;&nbsp;&middot;&nbsp;&nbsp;`main`&nbsp;&nbsp;&middot;&nbsp;&nbsp;**2 patches** across **1 apps**&nbsp;&nbsp;&middot;&nbsp;&nbsp;[Full details](PATCHES.md)
 
 | # | App | Patches | Version | Package |
 |---|---|---|---|---|
-| 1 | [**Doodle Jump**](PATCHES.md#doodle-jump-comlimadoodlejump) | 1 | `3.11.40` | [`com.lima.doodlejump`](https://play.google.com/store/apps/details?id=com.lima.doodlejump) |
-| 2 | [**XYZ app**](PATCHES.md#xyz-app-comexampleapp) | 1 | `2.0.0`, `1.0.2` | [`com.example.app`](https://play.google.com/store/apps/details?id=com.example.app) |
+| 1 | [**Doodle Jump**](PATCHES.md#doodle-jump-comlimadoodlejump) | 2 | `3.11.40` | [`com.lima.doodlejump`](https://play.google.com/store/apps/details?id=com.lima.doodlejump) |
 <!-- PATCHES_END -->
 
 ### 🛠️ Building locally
