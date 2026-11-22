@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/Darkaxt/morphe-patches/compare/v1.1.3...v1.2.0) (2026-11-22)
+
+### ✨ New Features
+
+* **doodlejump:** fix pool exhaustion, monster knockback, Game Over transition, top-bar HUD, and +1 life per 10k pts ([390df2e](https://github.com/Darkaxt/morphe-patches/commit/390df2ecf94b9d5fd355b580ff530770f302f6b7))
+
 ## [1.1.3](https://github.com/Darkaxt/morphe-patches/compare/v1.1.2...v1.1.3) (2026-11-22)
 
 ### 🐛 Bug Fixes
