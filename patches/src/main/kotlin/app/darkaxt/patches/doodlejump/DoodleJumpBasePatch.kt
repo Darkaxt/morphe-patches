@@ -3,6 +3,7 @@ package app.darkaxt.patches.doodlejump
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.patch
 import app.morphe.patcher.patch.resourceFile
+import app.morphe.patcher.patch.resourceXml
 import java.io.File
 
 internal const val DJ_LIB_PATH = "lib/arm64-v8a/libDoodleJump.so"
@@ -71,5 +72,13 @@ internal val doodleJumpNativeBasePatch = patch {
             modBytes[magicIdx + i] = 0
         }
         targetLib.writeBytes(modBytes)
+
+        // Newly added .so files (libDoodleJump_orig.so) are compressed by Morphe's APK writer,
+        // so enable extractNativeLibs to prevent INSTALL_FAILED_INVALID_APK (res=-2).
+        resourceXml("AndroidManifest.xml").use { manifest ->
+            val app = manifest.root.children("application").firstOrNull()
+                ?: throw PatchException("No <application> element found in AndroidManifest.xml.")
+            app.setAttribute("android:extractNativeLibs", "true")
+        }
     }
 }
