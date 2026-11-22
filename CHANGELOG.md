@@ -1,3 +1,9 @@
+## [1.1.0-dev.3](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0-dev.2...v1.1.0-dev.3) (2026-11-22)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** set android:extractNativeLibs=true for newly added native lib ([cd56999](https://github.com/Darkaxt/morphe-patches/commit/cd569993e71daa52eaf6cba9d19dbec9ab189ac1))
+
 ## [1.1.0-dev.2](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0-dev.1...v1.1.0-dev.2) (2026-11-22)
 
 ### 🐛 Bug Fixes

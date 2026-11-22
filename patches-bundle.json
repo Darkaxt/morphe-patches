@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-22T22:56:47",
-  "description": "## [1.1.0-dev.2](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0-dev.1...v1.1.0-dev.2) (2026-11-22)\n\n### 🐛 Bug Fixes\n\n* **doodlejump:** load bundled mod library from patch bundle classloader ([7335dbd](https://github.com/Darkaxt/morphe-patches/commit/7335dbdd3a119a91b2e3b3511feeadfb9ce27f17))",
-  "download_url": "https://github.com/Darkaxt/morphe-patches/releases/download/v1.1.0-dev.2/patches-1.1.0-dev.2.mpp",
+  "created_at": "2026-11-22T23:09:51",
+  "description": "## [1.1.0-dev.3](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0-dev.2...v1.1.0-dev.3) (2026-11-22)\n\n### 🐛 Bug Fixes\n\n* **doodlejump:** set android:extractNativeLibs=true for newly added native lib ([cd56999](https://github.com/Darkaxt/morphe-patches/commit/cd569993e71daa52eaf6cba9d19dbec9ab189ac1))",
+  "download_url": "https://github.com/Darkaxt/morphe-patches/releases/download/v1.1.0-dev.3/patches-1.1.0-dev.3.mpp",
   "signature_download_url": "",
-  "version": "1.1.0-dev.2"
+  "version": "1.1.0-dev.3"
 }
