@@ -10,17 +10,16 @@ plugins {
     alias(libs.plugins.animalsniffer)
 }
 
-group = "app.template"
+group = "app.darkaxt"
 
 patches {
-    // TODO: Update this section with your project details.
     about {
-        name = "UserXYZ Patches"
-        description = "Patches for apps I like"
-        source = "git@github.com:UserXYZ/morphe-patches.git"
-        author = "Awesome dev"
-        contact = "na"
-        website = "na"
+        name = "Darkaxt Morphe Patches"
+        description = "Custom Morphe patches for Android apps and games"
+        source = "https://github.com/Darkaxt/morphe-patches"
+        author = "Darkaxt"
+        contact = "https://github.com/Darkaxt/morphe-patches/issues"
+        website = "https://github.com/Darkaxt/morphe-patches"
         license = "GPLv3"
     }
 }
