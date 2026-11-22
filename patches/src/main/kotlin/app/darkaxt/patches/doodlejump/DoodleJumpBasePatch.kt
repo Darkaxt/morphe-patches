@@ -38,6 +38,8 @@ internal fun setModFeatureFlag(libFile: File, flagOffset: Int, enabled: Boolean)
     libFile.writeBytes(bytes)
 }
 
+private object DoodleJumpResourceAnchor
+
 /**
  * Shared internal patch that backs up libDoodleJump.so -> libDoodleJump_orig.so
  * and installs our native proxy library with all feature flags initially disabled
@@ -54,8 +56,9 @@ internal val doodleJumpNativeBasePatch = patch {
         origLib.parentFile?.mkdirs()
         targetLib.copyTo(origLib, overwrite = true)
 
-        val modStream = this::class.java.classLoader
+        val modStream = DoodleJumpResourceAnchor::class.java.classLoader
             ?.getResourceAsStream(BUNDLED_MOD_RESOURCE)
+            ?: DoodleJumpResourceAnchor::class.java.getResourceAsStream("/$BUNDLED_MOD_RESOURCE")
             ?: throw PatchException("Bundled mod library $BUNDLED_MOD_RESOURCE not found.")
 
         val modBytes = modStream.use { it.readBytes() }
