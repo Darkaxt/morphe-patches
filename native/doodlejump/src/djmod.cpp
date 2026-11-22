@@ -87,6 +87,9 @@ namespace offsets {
 constexpr uintptr_t kConvertTouch      = 0x2dff80;
 constexpr uintptr_t kResetLevel        = 0x2ee3b0;
 constexpr uintptr_t kRecyclePlatform   = 0x2f36b0;
+constexpr uintptr_t kRecycleBonus      = 0x2f9054;
+constexpr uintptr_t kRecycleMonster    = 0x2f9218;
+constexpr uintptr_t kRecycleUFO        = 0x2f9538;
 constexpr uintptr_t kUpdateGameplay    = 0x2f5c60;
 constexpr uintptr_t kScrollWorld       = 0x2f9c88;
 constexpr uintptr_t kTriggerGameOver   = 0x2fb658;
@@ -131,6 +134,18 @@ constexpr size_t kPlatformsEnd       = 0x74d8; // void**
 constexpr size_t kPlatformsCap       = 0x74e0; // void**
 constexpr size_t kPoolBegin          = 0x74e8; // void**
 constexpr size_t kPoolEnd            = 0x74f0; // void**
+constexpr size_t kBonusesBegin       = 0x7500; // void** (item +0x1c = float y)
+constexpr size_t kBonusesEnd         = 0x7508; // void**
+constexpr size_t kBlackHolesBegin    = 0x7560; // void** (item +0x04 = float y)
+constexpr size_t kBlackHolesEnd      = 0x7568; // void**
+constexpr size_t kBlackHolePoolEnd   = 0x7580; // void**
+constexpr size_t kBlackHolePoolCap   = 0x7588; // void**
+constexpr size_t kUFOsBegin          = 0x7590; // void** (item +0x20 = float y)
+constexpr size_t kUFOsEnd            = 0x7598; // void**
+constexpr size_t kMonstersBegin      = 0x75c0; // void** (item +0x44 = float y)
+constexpr size_t kMonstersEnd        = 0x75c8; // void**
+constexpr size_t kActiveUFOCount     = 0x74c8; // int
+constexpr size_t kActiveMonsterCount = 0x74cc; // int
 constexpr size_t kProtectedPlatform  = 0x8580; // void*
 
 // PlatformObject field offsets
@@ -151,9 +166,12 @@ inline T& field(void* base, size_t off) {
 // 3. Mod configuration & runtime state
 // ============================================================================
 static constexpr int   kMaxLives            = 3;
+static constexpr int   kLifeRecoverStep     = 10000;   // +1 life every 10,000 peak points
 static constexpr float kLowerScrollY        = 150.0f;
 static constexpr float kFloorBounceY        = 28.0f;
 static constexpr float kNormalJumpVy        = 9.0f;
+static constexpr float kMonsterKnockbackVy  = -6.5f;   // push downward away from monster/UFO
+static constexpr float kMonsterKnockbackDy  = 12.0f;
 static constexpr float kFallDamage1LifeDist = 750.0f;  // ~1.5 screens -> -1 life
 static constexpr float kFallDamage2LifeDist = 1750.0f; // ~3.5 screens -> -2 lives
 static constexpr float kInvulnDuration      = 2.0f;
@@ -175,8 +193,9 @@ struct Vec2 {
 
 // Endless Fall & 3-Lives state
 static std::vector<SavedPlatform> g_belowScreen;
-static int   g_lives          = kMaxLives;
-static float g_peakScore      = 0.0f;
+static int   g_lives              = kMaxLives;
+static int   g_nextLifeMilestone  = kLifeRecoverStep;
+static float g_peakScore          = 0.0f;
 static float g_invulnTimer    = 0.0f;
 static float g_damageFlash    = 0.0f;
 static bool  g_scrollingDown  = false;
@@ -215,6 +234,9 @@ static GlOrthofFn        orig_glOrthof        = nullptr;
 
 static ScrollWorldFn     fn_scrollWorld       = nullptr;
 static RecyclePlatformFn fn_recyclePlatform   = nullptr;
+static RecyclePlatformFn fn_recycleBonus      = nullptr;
+static RecyclePlatformFn fn_recycleMonster    = nullptr;
+static RecyclePlatformFn fn_recycleUFO        = nullptr;
 static PlatformResetFn   fn_platformReset     = nullptr;
 static PlatformSetTypeFn fn_platformSetType   = nullptr;
 static GetFloatFn        fn_getScreenHeight   = nullptr;
@@ -270,7 +292,7 @@ static void scroll_down_with_history(void* game, float scroll_down) {
 
     while ((end - begin) > 1) {
         void* top_plat = *(end - 1);
-        if (top_plat == protected_plat) break;
+        if (!top_plat || top_plat == protected_plat) break;
         float py = field<float>(top_plat, offsets::kPlatY);
         if (py > screen_top + 30.0f) {
             end -= 1;
@@ -278,6 +300,86 @@ static void scroll_down_with_history(void* game, float scroll_down) {
         } else {
             break;
         }
+    }
+
+    const float cull_top_y = screen_top + 30.0f;
+
+    // Recycle bonuses/springs/powerups that scrolled above the top of the screen
+    // (vanilla cullOffscreen only culls below y < -25, so without this the bonus pool leaks & crashes)
+    {
+        auto*& b_begin = field<void**>(game, offsets::kBonusesBegin);
+        auto*& b_end   = field<void**>(game, offsets::kBonusesEnd);
+        void** dst = b_begin;
+        for (void** it = b_begin; it < b_end; ++it) {
+            void* item = *it;
+            if (item && field<float>(item, 0x1c) > cull_top_y) {
+                for (void** pit = begin; pit < end; ++pit) {
+                    if (*pit && field<void*>(*pit, 0x40) == item) {
+                        field<void*>(*pit, 0x40) = nullptr;
+                    }
+                }
+                fn_recycleBonus(game, item);
+            } else {
+                *dst++ = item;
+            }
+        }
+        b_end = dst;
+    }
+
+    // Recycle monsters above the top of the screen
+    {
+        auto*& m_begin = field<void**>(game, offsets::kMonstersBegin);
+        auto*& m_end   = field<void**>(game, offsets::kMonstersEnd);
+        void** dst = m_begin;
+        for (void** it = m_begin; it < m_end; ++it) {
+            void* item = *it;
+            if (item && field<float>(item, 0x44) > cull_top_y) {
+                if (field<uint8_t>(item, 0x6d) != 0) {
+                    int& cnt = field<int>(game, offsets::kActiveMonsterCount);
+                    if (cnt > 0) cnt -= 1;
+                }
+                fn_recycleMonster(game, item);
+            } else {
+                *dst++ = item;
+            }
+        }
+        m_end = dst;
+    }
+
+    // Recycle UFOs above the top of the screen
+    {
+        auto*& u_begin = field<void**>(game, offsets::kUFOsBegin);
+        auto*& u_end   = field<void**>(game, offsets::kUFOsEnd);
+        void** dst = u_begin;
+        for (void** it = u_begin; it < u_end; ++it) {
+            void* item = *it;
+            if (item && field<float>(item, 0x20) > cull_top_y) {
+                int& cnt = field<int>(game, offsets::kActiveUFOCount);
+                if (cnt > 0) cnt -= 1;
+                fn_recycleUFO(game, item);
+            } else {
+                *dst++ = item;
+            }
+        }
+        u_end = dst;
+    }
+
+    // Recycle black holes above the top of the screen
+    {
+        auto*& bh_begin = field<void**>(game, offsets::kBlackHolesBegin);
+        auto*& bh_end   = field<void**>(game, offsets::kBlackHolesEnd);
+        auto*& bh_pend  = field<void**>(game, offsets::kBlackHolePoolEnd);
+        auto*& bh_pcap  = field<void**>(game, offsets::kBlackHolePoolCap);
+        void** dst = bh_begin;
+        for (void** it = bh_begin; it < bh_end; ++it) {
+            void* item = *it;
+            if (item && field<float>(item, 0x04) > cull_top_y && bh_pend < bh_pcap) {
+                *bh_pend++ = item;
+            } else {
+                *dst++ = item;
+            }
+        }
+        bh_end = dst;
     }
 
     float cur_world_y = field<float>(game, offsets::kWorldY);
@@ -311,15 +413,21 @@ static void apply_fall_damage(void* game, int dmg) {
     g_damageFlash = 0.6f;
     LOGI("Fall damage: -%d life (remaining: %d)", dmg, g_lives);
     if (g_lives <= 0) {
+        // Trigger vanilla's normal falling-death transition so sound, cleanup,
+        // hook_triggerGameOver (peak score), and the Game Over menu all run cleanly.
         g_gameOverArmed = true;
-        orig_triggerGameOver(game);
+        field<float>(game, offsets::kDoodlerY)  = 0.0f;
+        field<float>(game, offsets::kDoodlerVy) = -9.0f;
+        field<int>(game, offsets::kIsFalling)   = 1;
+        field<int>(game, 0x7498)                = 0; // disable collisions while dying
     }
 }
 
 static void hook_resetLevel(void* game) {
     g_belowScreen.clear();
-    g_lives          = kMaxLives;
-    g_peakScore      = 0.0f;
+    g_lives             = kMaxLives;
+    g_nextLifeMilestone = kLifeRecoverStep;
+    g_peakScore         = 0.0f;
     g_invulnTimer    = 0.0f;
     g_damageFlash    = 0.0f;
     g_scrollingDown  = false;
@@ -413,7 +521,16 @@ static void hook_updateGameplay(void* game) {
 
     float& score = field<float>(game, offsets::kScore);
     if (score < 0.0f) score = 0.0f;
-    if (score > g_peakScore) g_peakScore = score;
+    if (score > g_peakScore) {
+        g_peakScore = score;
+        while (g_peakScore >= static_cast<float>(g_nextLifeMilestone)) {
+            if (g_lives > 0 && g_lives < kMaxLives) {
+                g_lives += 1;
+                LOGI("Life recovered at %d pts (lives: %d)", g_nextLifeMilestone, g_lives);
+            }
+            g_nextLifeMilestone += kLifeRecoverStep;
+        }
+    }
 
     if (field<int>(game, offsets::kPhase) == 6 &&
         field<int>(game, offsets::kIsPlaying) == 1 &&
@@ -442,9 +559,13 @@ static void hook_updateGameplay(void* game) {
 }
 
 static void hook_checkCollisions(void* game) {
-    int prev_monster = field<int>(game, offsets::kIsHitMonsterDizzy);
-    int prev_ufo     = field<int>(game, offsets::kIsAbductedUFO);
-    int prev_other   = field<int>(game, offsets::kIsHitOtherHazard);
+    int prev_monster    = field<int>(game, offsets::kIsHitMonsterDizzy);
+    int prev_ufo        = field<int>(game, offsets::kIsAbductedUFO);
+    int prev_other      = field<int>(game, offsets::kIsHitOtherHazard);
+    int prev_coll_en    = field<int>(game, 0x7498);
+    int prev_8670       = field<int>(game, 0x8670);
+    int prev_8678       = field<int>(game, 0x8678);
+    int prev_96a8       = field<int>(game, 0x96a8);
 
     orig_checkCollisions(game);
 
@@ -467,12 +588,25 @@ static void hook_checkCollisions(void* game) {
         field<int>(game, offsets::kIsAbductedUFO)     = 0;
         field<int>(game, offsets::kIsHitOtherHazard)  = 0;
         field<int>(game, offsets::kDeathAnimState)    = 0;
+        field<int>(game, offsets::kIsFallingDead)     = 0;
         field<int>(game, offsets::kIsPlaying)         = 1;
-        field<int>(game, offsets::kIsFalling)         = 0;
-        field<float>(game, offsets::kDoodlerVy)       = kNormalJumpVy;
+        // Push the Doodler back downward away from the monster/UFO instead of phasing through it
+        float& dy = field<float>(game, offsets::kDoodlerY);
+        float& vy = field<float>(game, offsets::kDoodlerVy);
+        dy = std::max(kFloorBounceY, dy - kMonsterKnockbackDy);
+        vy = std::min(vy, kMonsterKnockbackVy);
+        field<int>(game, offsets::kIsFalling) = 1;
+        field<int>(game, 0x7498) = (prev_coll_en != 0) ? prev_coll_en : 1; // re-enable collisions!
+        field<int>(game, 0x8670) = prev_8670;
+        field<int>(game, 0x8678) = prev_8678;
+        field<int>(game, 0x96a8) = prev_96a8;
+        field<int>(game, 0x74a4) = 0;
+        field<void*>(game, 0x74b0) = nullptr;
         field<int>(game, 0x8eb8) = 0;
         field<int>(game, 0x9140) = 0;
+        field<int>(game, 0x95e0) = 0;
         field<int>(game, 0x95e4) = 0;
+        field<float>(game, 0x790c) = 0.0f;
         g_trackingFall = false;
     };
 
@@ -682,6 +816,9 @@ static void djmod_init() {
 
     fn_scrollWorld       = reinterpret_cast<ScrollWorldFn>(g_base + offsets::kScrollWorld);
     fn_recyclePlatform   = reinterpret_cast<RecyclePlatformFn>(g_base + offsets::kRecyclePlatform);
+    fn_recycleBonus      = reinterpret_cast<RecyclePlatformFn>(g_base + offsets::kRecycleBonus);
+    fn_recycleMonster    = reinterpret_cast<RecyclePlatformFn>(g_base + offsets::kRecycleMonster);
+    fn_recycleUFO        = reinterpret_cast<RecyclePlatformFn>(g_base + offsets::kRecycleUFO);
     fn_platformReset     = reinterpret_cast<PlatformResetFn>(g_base + offsets::kPlatformReset);
     fn_platformSetType   = reinterpret_cast<PlatformSetTypeFn>(g_base + offsets::kPlatformSetType);
     fn_getScreenHeight   = reinterpret_cast<GetFloatFn>(g_base + offsets::kGetScreenHeight);
