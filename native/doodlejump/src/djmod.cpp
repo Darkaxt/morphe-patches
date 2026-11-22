@@ -3,14 +3,35 @@
 #include <cstdint>
 #include <cstring>
 #include <dlfcn.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <vector>
 #include <android/log.h>
+#include <GLES/gl.h>
 
 #include "arm64_hook.h"
 #include "hud_draw.h"
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "DJMod", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "DJMod", __VA_ARGS__)
+
+// ============================================================================
+// 0. Embedded binary feature config (patched in-place by Morphe patches)
+// ============================================================================
+struct ModConfig {
+    char     magic[8];       // "DJMODCFG"
+    uint32_t endless_fall;   // 1 = Endless Fall & 3-Lives enabled
+    uint32_t foldable_view;  // 1 = Foldable Seamless Cylindrical Wide View enabled
+};
+
+// Default to both enabled for standalone local builds; Morphe base patch clears
+// them to 0 and each user-selected Morphe patch flips its own flag to 1.
+extern "C" __attribute__((used, visibility("default")))
+volatile ModConfig g_mod_cfg = {
+    {'D', 'J', 'M', 'O', 'D', 'C', 'F', 'G'},
+    1u,
+    1u,
+};
 
 // ============================================================================
 // 1. Proxy forwarding to libDoodleJump_orig.so (12 JNI exports, zero-overhead)
@@ -63,19 +84,31 @@ static const char* kJniNames[12] = {
 // ============================================================================
 namespace offsets {
 // Function RVAs (Ghidra VA - 0x100000)
-constexpr uintptr_t kRunGameLoopNative = 0x3820c0;
+constexpr uintptr_t kConvertTouch      = 0x2dff80;
 constexpr uintptr_t kResetLevel        = 0x2ee3b0;
 constexpr uintptr_t kRecyclePlatform   = 0x2f36b0;
 constexpr uintptr_t kUpdateGameplay    = 0x2f5c60;
 constexpr uintptr_t kScrollWorld       = 0x2f9c88;
 constexpr uintptr_t kTriggerGameOver   = 0x2fb658;
 constexpr uintptr_t kCheckCollisions   = 0x2fbeb0;
+constexpr uintptr_t kRenderWorld       = 0x305d20;
 constexpr uintptr_t kRenderHUD         = 0x30d6ac;
 constexpr uintptr_t kCullOffscreen     = 0x30eeb4;
+constexpr uintptr_t kSetupScreen       = 0x33c83c;
 constexpr uintptr_t kPlatformReset     = 0x343bec;
 constexpr uintptr_t kPlatformSetType   = 0x343cb8;
-constexpr uintptr_t kGetScreenHeight   = 0x3466ac;
+constexpr uintptr_t kSetScaleX         = 0x3465e0;
+constexpr uintptr_t kSetScaleY         = 0x3465ec;
 constexpr uintptr_t kGetTopInset       = 0x346604;
+constexpr uintptr_t kGetScreenHeight   = 0x3466ac;
+constexpr uintptr_t kSetAspectRatio    = 0x3466f4;
+constexpr uintptr_t kSetLogicalWidth   = 0x346700;
+constexpr uintptr_t kSetLogicalHeight  = 0x34670c;
+constexpr uintptr_t kRunGameLoopNative = 0x3820c0;
+
+// GOT / Data RVAs
+constexpr uintptr_t kGotGlOrthof       = 0x7ac280;
+constexpr uintptr_t kScreenMetrics     = 0x7e6e30;
 
 // Game struct (&DAT_008e6e60) field offsets
 constexpr size_t kDt                 = 0x34;   // float
@@ -118,12 +151,14 @@ inline T& field(void* base, size_t off) {
 // 3. Mod configuration & runtime state
 // ============================================================================
 static constexpr int   kMaxLives            = 3;
-static constexpr float kLowerScrollY        = 150.0f; // Scroll camera down when falling below this Y
-static constexpr float kFloorBounceY        = 28.0f;  // Starting floor bounce height at worldY == 0
-static constexpr float kNormalJumpVy        = 9.0f;   // Vanilla jump impulse (0x41100000)
-static constexpr float kFallDamage1LifeDist = 750.0f; // ~1.5 screens -> -1 life
-static constexpr float kFallDamage2LifeDist = 1750.0f;// ~3.5 screens -> -2 lives
-static constexpr float kInvulnDuration      = 2.0f;   // Invulnerability after monster/UFO hit
+static constexpr float kLowerScrollY        = 150.0f;
+static constexpr float kFloorBounceY        = 28.0f;
+static constexpr float kNormalJumpVy        = 9.0f;
+static constexpr float kFallDamage1LifeDist = 750.0f;  // ~1.5 screens -> -1 life
+static constexpr float kFallDamage2LifeDist = 1750.0f; // ~3.5 screens -> -2 lives
+static constexpr float kInvulnDuration      = 2.0f;
+static constexpr float kFoldableMinAspect   = 1.80f;   // Trigger on screens wider than ~9:16
+static constexpr float kFoldableTargetH     = 600.0f;  // Tall phone logical vertical height
 
 struct SavedPlatform {
     float worldY;
@@ -133,6 +168,12 @@ struct SavedPlatform {
     float moveSpeed;
 };
 
+struct Vec2 {
+    float x;
+    float y;
+};
+
+// Endless Fall & 3-Lives state
 static std::vector<SavedPlatform> g_belowScreen;
 static int   g_lives          = kMaxLives;
 static float g_peakScore      = 0.0f;
@@ -143,6 +184,11 @@ static bool  g_trackingFall   = false;
 static float g_fallStartWorld = 0.0f;
 static bool  g_gameOverArmed  = false;
 
+// Foldable Seamless Cylindrical View state
+static float g_fullW   = 320.0f;
+static float g_extraX  = 0.0f;
+static float g_targetH = 0.0f;
+
 // Original / helper function pointers
 using VoidGameFn        = void (*)(void*);
 using RenderHudFn       = void (*)(void*, int);
@@ -151,13 +197,21 @@ using RecyclePlatformFn = void (*)(void*, void*);
 using PlatformResetFn   = void (*)(void*);
 using PlatformSetTypeFn = void (*)(void*, int);
 using GetFloatFn        = float (*)();
+using SetFloatFn        = void (*)(float);
+using SetupScreenFn     = void (*)(int, int);
+using ConvertTouchFn    = Vec2 (*)(void*, const Vec2*);
+using GlOrthofFn        = void (*)(GLfloat, GLfloat, GLfloat, GLfloat, GLfloat, GLfloat);
 
 static VoidGameFn        orig_resetLevel      = nullptr;
 static VoidGameFn        orig_updateGameplay  = nullptr;
 static VoidGameFn        orig_cullOffscreen   = nullptr;
 static VoidGameFn        orig_checkCollisions = nullptr;
+static VoidGameFn        orig_renderWorld     = nullptr;
 static RenderHudFn       orig_renderHUD       = nullptr;
 static VoidGameFn        orig_triggerGameOver = nullptr;
+static SetupScreenFn     orig_setupScreen     = nullptr;
+static ConvertTouchFn    orig_convertTouch    = nullptr;
+static GlOrthofFn        orig_glOrthof        = nullptr;
 
 static ScrollWorldFn     fn_scrollWorld       = nullptr;
 static RecyclePlatformFn fn_recyclePlatform   = nullptr;
@@ -165,9 +219,14 @@ static PlatformResetFn   fn_platformReset     = nullptr;
 static PlatformSetTypeFn fn_platformSetType   = nullptr;
 static GetFloatFn        fn_getScreenHeight   = nullptr;
 static GetFloatFn        fn_getTopInset       = nullptr;
+static SetFloatFn        fn_setAspectRatio    = nullptr;
+static SetFloatFn        fn_setLogicalWidth   = nullptr;
+static SetFloatFn        fn_setLogicalHeight  = nullptr;
+static SetFloatFn        fn_setScaleX         = nullptr;
+static SetFloatFn        fn_setScaleY         = nullptr;
 
 // ============================================================================
-// 4. Platform vector / pool helpers
+// 4. Endless Fall & 3-Lives helpers + hooks
 // ============================================================================
 static void insert_platform_front(void* game, void* plat) {
     auto*& begin = field<void**>(game, offsets::kPlatformsBegin);
@@ -178,8 +237,6 @@ static void insert_platform_front(void* game, void* plat) {
     size_t capacity = static_cast<size_t>(cap - begin);
 
     if (count >= capacity) {
-        // Safety: if vector is at capacity, avoid raw allocator mismatch — just don't overflow.
-        // In practice we free top platforms before restoring bottom ones, so count < capacity.
         fn_recyclePlatform(game, plat);
         return;
     }
@@ -202,12 +259,10 @@ static void* pop_platform_from_pool(void* game) {
 static void scroll_down_with_history(void* game, float scroll_down) {
     g_scrollingDown = true;
 
-    // 1. Shift world objects UP by +scroll_down, and reduce worldY & score by -scroll_down.
     fn_scrollWorld(game, -scroll_down);
 
-    // 2. Free platforms that scrolled above the top of the screen back into the pool.
     float* rect = field<float*>(game, offsets::kScreenRectPtr);
-    float screen_top = rect ? (rect[1] + rect[3]) : 540.0f;
+    float screen_top = rect ? (rect[1] + rect[3]) : 600.0f;
 
     auto*& begin = field<void**>(game, offsets::kPlatformsBegin);
     auto*& end   = field<void**>(game, offsets::kPlatformsEnd);
@@ -225,7 +280,6 @@ static void scroll_down_with_history(void* game, float scroll_down) {
         }
     }
 
-    // 3. Restore previous platforms from g_belowScreen as they re-enter from the bottom.
     float cur_world_y = field<float>(game, offsets::kWorldY);
     int restored = 0;
     while (!g_belowScreen.empty() && restored < 24) {
@@ -262,9 +316,6 @@ static void apply_fall_damage(void* game, int dmg) {
     }
 }
 
-// ============================================================================
-// 5. Hooks
-// ============================================================================
 static void hook_resetLevel(void* game) {
     g_belowScreen.clear();
     g_lives          = kMaxLives;
@@ -275,7 +326,6 @@ static void hook_resetLevel(void* game) {
     g_trackingFall   = false;
     g_fallStartWorld = 0.0f;
     g_gameOverArmed  = false;
-    LOGI("Level reset -> lives=%d", g_lives);
     orig_resetLevel(game);
 }
 
@@ -284,7 +334,6 @@ static void hook_cullOffscreen(void* game) {
         return;
     }
 
-    // Snapshot platforms about to be culled by vanilla FUN_0040eeb4 (y < -6.0f)
     void** begin = field<void**>(game, offsets::kPlatformsBegin);
     void** end   = field<void**>(game, offsets::kPlatformsEnd);
     void* protected_plat = field<void*>(game, offsets::kProtectedPlatform);
@@ -299,7 +348,6 @@ static void hook_cullOffscreen(void* game) {
 
         int type = field<int>(p, offsets::kPlatType);
         int broken = field<int>(p, offsets::kPlatBroken);
-        // Do not save already-broken brown platforms
         if (type == 2 && broken != 0) continue;
 
         SavedPlatform sp;
@@ -309,7 +357,6 @@ static void hook_cullOffscreen(void* game) {
         sp.moveMode  = field<int>(p, offsets::kPlatMoveMode);
         sp.moveSpeed = field<float>(p, offsets::kPlatMoveSpeed);
 
-        // Keep history monotonic (avoid duplicate entries if anything oscillates)
         if (g_belowScreen.empty() || sp.worldY >= g_belowScreen.back().worldY - 1.0f) {
             g_belowScreen.push_back(sp);
         }
@@ -335,7 +382,6 @@ static void hook_updateGameplay(void* game) {
         float& vy = field<float>(game, offsets::kDoodlerVy);
         float& wy = field<float>(game, offsets::kWorldY);
 
-        // 1. Downward camera scroll when falling below kLowerScrollY
         if (dy < kLowerScrollY && vy < 0.0f && wy > 0.0f) {
             float want_down = kLowerScrollY - dy;
             float scroll_down = std::min(want_down, wy);
@@ -345,7 +391,6 @@ static void hook_updateGameplay(void* game) {
             }
         }
 
-        // 2. Starting floor bounce at worldY == 0
         if (wy <= 1.0f && dy < kFloorBounceY && vy < 0.0f) {
             if (g_trackingFall) {
                 float fall_dist = g_fallStartWorld - (wy + dy);
@@ -366,7 +411,6 @@ static void hook_updateGameplay(void* game) {
 
     orig_updateGameplay(game);
 
-    // Post-tick: clamp score >= 0, track peak score, detect platform landings for fall damage
     float& score = field<float>(game, offsets::kScore);
     if (score < 0.0f) score = 0.0f;
     if (score > g_peakScore) g_peakScore = score;
@@ -404,7 +448,6 @@ static void hook_checkCollisions(void* game) {
 
     orig_checkCollisions(game);
 
-    // Black Holes always end the run immediately
     if (field<int>(game, offsets::kIsBlackHole) != 0) {
         return;
     }
@@ -427,7 +470,6 @@ static void hook_checkCollisions(void* game) {
         field<int>(game, offsets::kIsPlaying)         = 1;
         field<int>(game, offsets::kIsFalling)         = 0;
         field<float>(game, offsets::kDoodlerVy)       = kNormalJumpVy;
-        // Clear dizzy stars / stun timers set by monster hit
         field<int>(game, 0x8eb8) = 0;
         field<int>(game, 0x9140) = 0;
         field<int>(game, 0x95e4) = 0;
@@ -447,7 +489,6 @@ static void hook_checkCollisions(void* game) {
         g_invulnTimer = kInvulnDuration;
         cancel_ko();
     }
-    // If g_lives == 0, leave the vanilla KO flag set so Game Over triggers normally
 }
 
 static void hook_triggerGameOver(void* game) {
@@ -477,7 +518,143 @@ static void hook_renderHUD(void* game, int flag) {
 }
 
 // ============================================================================
-// 6. Constructor: load libDoodleJump_orig.so & install all 6 hooks
+// 5. Foldable / Wide Screen Seamless Cylindrical Wrap-Around View hooks
+// ============================================================================
+static void hook_setupScreen(int pixelW, int pixelH) {
+    orig_setupScreen(pixelW, pixelH);
+
+    if (pixelW <= 0 || pixelH <= 0) {
+        g_extraX = 0.0f;
+        g_fullW  = 320.0f;
+        return;
+    }
+
+    float aspect = static_cast<float>(pixelH) / static_cast<float>(pixelW);
+    if (aspect < kFoldableMinAspect) {
+        g_targetH = kFoldableTargetH;
+        g_fullW   = g_targetH * (static_cast<float>(pixelW) / static_cast<float>(pixelH));
+        g_extraX  = (g_fullW - 320.0f) * 0.5f;
+
+        void* metrics = reinterpret_cast<void*>(g_base + offsets::kScreenMetrics);
+        // Keep logical playfield & UI rect at [0, 0, 320, g_targetH] so wrap physics and menus
+        // stay centered and unclipped with full vertical visibility.
+        field<float>(metrics, 0x0c) = g_targetH;
+        field<float>(metrics, 0x1c) = g_targetH;
+
+        if (fn_setAspectRatio)   fn_setAspectRatio(g_targetH / 320.0f);
+        if (fn_setLogicalWidth)  fn_setLogicalWidth(320.0f);
+        if (fn_setLogicalHeight) fn_setLogicalHeight(g_targetH);
+        if (fn_setScaleX)        fn_setScaleX(static_cast<float>(pixelW) / g_fullW);
+        if (fn_setScaleY)        fn_setScaleY(static_cast<float>(pixelH) / g_targetH);
+
+        LOGI("Foldable view active: %dx%d (aspect=%.2f) -> logical 320x%.0f, fullW=%.1f, extraX=%.1f",
+             pixelW, pixelH, aspect, g_targetH, g_fullW, g_extraX);
+    } else {
+        g_extraX  = 0.0f;
+        g_fullW   = 320.0f;
+        g_targetH = 320.0f * aspect;
+    }
+}
+
+static Vec2 hook_convertTouch(void* metrics, const Vec2* raw_px) {
+    Vec2 res = orig_convertTouch(metrics, raw_px);
+    if (g_extraX > 1.0f && raw_px) {
+        float pixelW = field<float>(metrics, 0x20);
+        if (pixelW > 0.0f) {
+            res.x = raw_px->x * (g_fullW / pixelW) - g_extraX;
+        }
+    }
+    return res;
+}
+
+static void hook_glOrthof(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top,
+                          GLfloat zNear, GLfloat zFar) {
+    if (g_extraX > 1.0f && std::fabs(left) < 1.0f && std::fabs(right - 320.0f) < 1.0f) {
+        left  -= g_extraX;
+        right += g_extraX;
+    }
+    orig_glOrthof(left, right, bottom, top, zNear, zFar);
+}
+
+static void draw_wrap_margin_shading(float extra_x, float height) {
+    GLboolean tex_enabled   = glIsEnabled(GL_TEXTURE_2D);
+    GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+
+    // Subtle darkening on wrapped side panels so the active 0..320 playfield reads clearly
+    hud_draw::draw_rect(-extra_x, 0.0f, extra_x, height, 0.0f, 0.0f, 0.0f, 0.14f);
+    hud_draw::draw_rect(320.0f,   0.0f, extra_x, height, 0.0f, 0.0f, 0.0f, 0.14f);
+
+    // Thin subtle seam lines at x = 0 and x = 320
+    hud_draw::draw_rect(-0.75f,   0.0f, 1.5f, height, 0.0f, 0.0f, 0.0f, 0.22f);
+    hud_draw::draw_rect(319.25f,  0.0f, 1.5f, height, 0.0f, 0.0f, 0.0f, 0.22f);
+
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    if (tex_enabled) glEnable(GL_TEXTURE_2D);
+    if (!blend_enabled) glDisable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+static void hook_renderWorld(void* game) {
+    if (g_extraX <= 1.0f) {
+        orig_renderWorld(game);
+        return;
+    }
+
+    static bool s_in_wrap = false;
+    if (s_in_wrap) {
+        orig_renderWorld(game);
+        return;
+    }
+
+    s_in_wrap = true;
+    glMatrixMode(GL_MODELVIEW);
+
+    // Left wrapped copy (world shifted by -320)
+    glPushMatrix();
+    glTranslatef(-320.0f, 0.0f, 0.0f);
+    orig_renderWorld(game);
+    glPopMatrix();
+
+    // Right wrapped copy (world shifted by +320)
+    glPushMatrix();
+    glTranslatef(320.0f, 0.0f, 0.0f);
+    orig_renderWorld(game);
+    glPopMatrix();
+
+    // Subtle shading + wrap boundary guides on the side extensions
+    float h = fn_getScreenHeight ? fn_getScreenHeight() : kFoldableTargetH;
+    draw_wrap_margin_shading(g_extraX, h);
+
+    // Center active world rendered last so the real Doodler & active playfield are always on top
+    orig_renderWorld(game);
+
+    s_in_wrap = false;
+}
+
+static bool patch_got_slot(uintptr_t got_addr, void* replacement, void** out_orig) {
+    uintptr_t page_sz = static_cast<uintptr_t>(sysconf(_SC_PAGESIZE));
+    if (page_sz < 4096) page_sz = 4096;
+    uintptr_t page_start = got_addr & ~(page_sz - 1);
+
+    if (mprotect(reinterpret_cast<void*>(page_start), page_sz, PROT_READ | PROT_WRITE) != 0) {
+        return false;
+    }
+    auto** slot = reinterpret_cast<void**>(got_addr);
+    *out_orig = *slot;
+    *slot = replacement;
+    mprotect(reinterpret_cast<void*>(page_start), page_sz, PROT_READ);
+    return true;
+}
+
+// ============================================================================
+// 6. Constructor: load libDoodleJump_orig.so & install enabled feature hooks
 // ============================================================================
 __attribute__((constructor))
 static void djmod_init() {
@@ -500,22 +677,38 @@ static void djmod_init() {
     }
 
     g_base = reinterpret_cast<uintptr_t>(g_jni_ptrs[7]) - offsets::kRunGameLoopNative;
-    LOGI("libDoodleJump_orig.so loaded at base=0x%lx", static_cast<unsigned long>(g_base));
+    LOGI("libDoodleJump_orig.so base=0x%lx cfg=(endless_fall=%u, foldable_view=%u)",
+         static_cast<unsigned long>(g_base), g_mod_cfg.endless_fall, g_mod_cfg.foldable_view);
 
-    fn_scrollWorld     = reinterpret_cast<ScrollWorldFn>(g_base + offsets::kScrollWorld);
-    fn_recyclePlatform = reinterpret_cast<RecyclePlatformFn>(g_base + offsets::kRecyclePlatform);
-    fn_platformReset   = reinterpret_cast<PlatformResetFn>(g_base + offsets::kPlatformReset);
-    fn_platformSetType = reinterpret_cast<PlatformSetTypeFn>(g_base + offsets::kPlatformSetType);
-    fn_getScreenHeight = reinterpret_cast<GetFloatFn>(g_base + offsets::kGetScreenHeight);
-    fn_getTopInset     = reinterpret_cast<GetFloatFn>(g_base + offsets::kGetTopInset);
+    fn_scrollWorld       = reinterpret_cast<ScrollWorldFn>(g_base + offsets::kScrollWorld);
+    fn_recyclePlatform   = reinterpret_cast<RecyclePlatformFn>(g_base + offsets::kRecyclePlatform);
+    fn_platformReset     = reinterpret_cast<PlatformResetFn>(g_base + offsets::kPlatformReset);
+    fn_platformSetType   = reinterpret_cast<PlatformSetTypeFn>(g_base + offsets::kPlatformSetType);
+    fn_getScreenHeight   = reinterpret_cast<GetFloatFn>(g_base + offsets::kGetScreenHeight);
+    fn_getTopInset       = reinterpret_cast<GetFloatFn>(g_base + offsets::kGetTopInset);
+    fn_setAspectRatio    = reinterpret_cast<SetFloatFn>(g_base + offsets::kSetAspectRatio);
+    fn_setLogicalWidth   = reinterpret_cast<SetFloatFn>(g_base + offsets::kSetLogicalWidth);
+    fn_setLogicalHeight  = reinterpret_cast<SetFloatFn>(g_base + offsets::kSetLogicalHeight);
+    fn_setScaleX         = reinterpret_cast<SetFloatFn>(g_base + offsets::kSetScaleX);
+    fn_setScaleY         = reinterpret_cast<SetFloatFn>(g_base + offsets::kSetScaleY);
 
     bool ok = true;
-    ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kResetLevel),      hook_resetLevel,      &orig_resetLevel);
-    ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kUpdateGameplay),  hook_updateGameplay,  &orig_updateGameplay);
-    ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kCullOffscreen),   hook_cullOffscreen,   &orig_cullOffscreen);
-    ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kCheckCollisions), hook_checkCollisions, &orig_checkCollisions);
-    ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kRenderHUD),       hook_renderHUD,       &orig_renderHUD);
-    ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kTriggerGameOver), hook_triggerGameOver, &orig_triggerGameOver);
+    if (g_mod_cfg.endless_fall != 0) {
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kResetLevel),      hook_resetLevel,      &orig_resetLevel);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kUpdateGameplay),  hook_updateGameplay,  &orig_updateGameplay);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kCullOffscreen),   hook_cullOffscreen,   &orig_cullOffscreen);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kCheckCollisions), hook_checkCollisions, &orig_checkCollisions);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kRenderHUD),       hook_renderHUD,       &orig_renderHUD);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kTriggerGameOver), hook_triggerGameOver, &orig_triggerGameOver);
+    }
+
+    if (g_mod_cfg.foldable_view != 0) {
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kSetupScreen),  hook_setupScreen,  &orig_setupScreen);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kConvertTouch), hook_convertTouch, &orig_convertTouch);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kRenderWorld),  hook_renderWorld,  &orig_renderWorld);
+        ok &= patch_got_slot(g_base + offsets::kGotGlOrthof, reinterpret_cast<void*>(hook_glOrthof),
+                             reinterpret_cast<void**>(&orig_glOrthof));
+    }
 
     LOGI("DJMod hooks installed: %s", ok ? "ALL OK" : "SOME FAILED");
 }
