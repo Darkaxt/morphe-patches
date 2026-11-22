@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0...v1.1.1) (2026-11-22)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** load bundled mod library from patch bundle classloader ([7335dbd](https://github.com/Darkaxt/morphe-patches/commit/7335dbdd3a119a91b2e3b3511feeadfb9ce27f17))
+* **doodlejump:** release v1.1.1 with bundle classloader fix ([602df71](https://github.com/Darkaxt/morphe-patches/commit/602df71c7e69ff8fe0771c7e3a3eef3783cf1625))
+
 ## [1.1.0](https://github.com/Darkaxt/morphe-patches/compare/v1.0.0...v1.1.0) (2026-11-22)
 
 ### ✨ New Features

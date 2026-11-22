@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-22T22:51:37",
-  "description": "## [1.1.0](https://github.com/Darkaxt/morphe-patches/compare/v1.0.0...v1.1.0) (2026-11-22)\n\n### ✨ New Features\n\n* **doodlejump:** add Foldable Seamless Wide View patch with cylindrical wrap-around rendering ([31ce220](https://github.com/Darkaxt/morphe-patches/commit/31ce220f94eb57b606dff28eb6324809758d06df))\n* **doodlejump:** release v1.1.0 with Foldable Seamless Wide View patch ([8f71b56](https://github.com/Darkaxt/morphe-patches/commit/8f71b566df1809f93e243093c29eeace58dd29d8))\n\n### 🐛 Bug Fixes\n\n* remove template example patch ([3af4c48](https://github.com/Darkaxt/morphe-patches/commit/3af4c48b7a141e7e931002fb40610d1a99e2c07f))\n* remove template example patch from main ([ee8a9e6](https://github.com/Darkaxt/morphe-patches/commit/ee8a9e674611d09eade94dd828af2350a212812c))",
-  "download_url": "https://github.com/Darkaxt/morphe-patches/releases/download/v1.1.0/patches-1.1.0.mpp",
+  "created_at": "2026-11-22T22:57:03",
+  "description": "## [1.1.1](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0...v1.1.1) (2026-11-22)\n\n### 🐛 Bug Fixes\n\n* **doodlejump:** load bundled mod library from patch bundle classloader ([7335dbd](https://github.com/Darkaxt/morphe-patches/commit/7335dbdd3a119a91b2e3b3511feeadfb9ce27f17))\n* **doodlejump:** release v1.1.1 with bundle classloader fix ([602df71](https://github.com/Darkaxt/morphe-patches/commit/602df71c7e69ff8fe0771c7e3a3eef3783cf1625))",
+  "download_url": "https://github.com/Darkaxt/morphe-patches/releases/download/v1.1.1/patches-1.1.1.mpp",
   "signature_download_url": "",
-  "version": "1.1.0"
+  "version": "1.1.1"
 }
