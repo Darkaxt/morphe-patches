@@ -648,10 +648,13 @@ static void hook_renderHUD(void* game, int flag) {
         float screen_h     = fn_getScreenHeight ? fn_getScreenHeight() : 533.0f;
         float top_inset    = fn_getTopInset ? fn_getTopInset() : 0.0f;
 
+        const void* doodler_sprite = field<void*>(game, 0x70c0);
+        if (!doodler_sprite) doodler_sprite = field<void*>(game, 0x70c8);
+
         hud_draw::render_overlay(
             g_lives, kMaxLives, static_cast<int>(g_peakScore),
             screen_left, screen_width, screen_h, top_inset,
-            g_invulnTimer, g_damageFlash);
+            g_invulnTimer, g_damageFlash, doodler_sprite);
     }
 }
 
