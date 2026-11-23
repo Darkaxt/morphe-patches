@@ -320,7 +320,7 @@ static void ensure_reachable_gaps(void* game) {
         int broken = field<int>(p, offsets::kPlatBroken);
         if (type == 2 || broken != 0) continue;
         float py = field<float>(p, offsets::kPlatY);
-        if (py >= -10.0f && py <= screen_top + 40.0f) {
+        if (py >= -10.0f && py <= screen_top + 120.0f) {
             solid_y[n_solid++] = py;
         }
     }
@@ -615,12 +615,6 @@ static void hook_updateGameplay(void* game) {
 
     if (phase == 6 && is_playing == 1 && falling_dead == 0 && black_hole == 0 &&
         hit_hazard == 0 && g_lives > 0 && !g_gameOverArmed) {
-        static float s_gap_check_accum = 0.0f;
-        s_gap_check_accum += dt;
-        if (s_gap_check_accum >= 0.30f) {
-            s_gap_check_accum = 0.0f;
-            ensure_reachable_gaps(game);
-        }
         float& dy = field<float>(game, offsets::kDoodlerY);
         float& vy = field<float>(game, offsets::kDoodlerVy);
         float& wy = field<float>(game, offsets::kWorldY);
@@ -653,6 +647,14 @@ static void hook_updateGameplay(void* game) {
     }
 
     orig_updateGameplay(game);
+
+    if (field<int>(game, offsets::kPhase) == 6 &&
+        field<int>(game, offsets::kIsPlaying) == 1 &&
+        field<int>(game, offsets::kIsFallingDead) == 0 &&
+        field<int>(game, offsets::kIsBlackHole) == 0 &&
+        !g_gameOverArmed) {
+        ensure_reachable_gaps(game);
+    }
 
     float& score = field<float>(game, offsets::kScore);
     if (score < 0.0f) score = 0.0f;
