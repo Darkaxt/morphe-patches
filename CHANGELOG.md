@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/Darkaxt/morphe-patches/compare/v1.2.0...v1.2.1) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** recover +1 life per 10,000 clean climb since last damage ([79df7f3](https://github.com/Darkaxt/morphe-patches/commit/79df7f32ea9fdb346447cef7a9ab0324d4cdd637))
+
 ## [1.2.0](https://github.com/Darkaxt/morphe-patches/compare/v1.1.3...v1.2.0) (2026-11-22)
 
 ### ✨ New Features
