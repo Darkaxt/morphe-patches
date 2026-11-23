@@ -292,13 +292,41 @@ static float next_rand_x() {
     return 36.0f + u * 248.0f;
 }
 
+// Polymorphic helpers for game+0x7638 theme objects across all 17 themes:
+//   vtable+0x10: int   getType(void* obj)  (3=trap, 8=spike/icicle plat, 9=hazard, 12=special plat)
+//   vtable+0x20: float getY(void* obj)
+static int special_get_type(void* obj) {
+    auto** vtbl = *reinterpret_cast<void***>(obj);
+    if (!vtbl || !vtbl[2]) return -1;
+    using Fn = int (*)(void*);
+    return reinterpret_cast<Fn>(vtbl[2])(obj);
+}
+
+static float special_get_y(void* obj) {
+    auto** vtbl = *reinterpret_cast<void***>(obj);
+    if (!vtbl || !vtbl[4]) return -9999.0f;
+    using Fn = float (*)(void*);
+    return reinterpret_cast<Fn>(vtbl[4])(obj);
+}
+
+static float special_get_x(void* obj, int stype) {
+    return (stype == 9) ? field<float>(obj, 0x28) : field<float>(obj, 0x18);
+}
+
 // Picks an X coordinate in [36, 284] at `target_y` that does not overlap any
-// existing platform (including brown/crumbling/icicle/moving) or monster.
+// existing platform (all types), special theme object (all 17 themes), monster,
+// UFO, or black hole.
 static float pick_non_overlapping_x(void* game, float target_y) {
-    void** p_begin = field<void**>(game, offsets::kPlatformsBegin);
-    void** p_end   = field<void**>(game, offsets::kPlatformsEnd);
-    void** m_begin = field<void**>(game, offsets::kMonstersBegin);
-    void** m_end   = field<void**>(game, offsets::kMonstersEnd);
+    void** p_begin  = field<void**>(game, offsets::kPlatformsBegin);
+    void** p_end    = field<void**>(game, offsets::kPlatformsEnd);
+    void** m_begin  = field<void**>(game, offsets::kMonstersBegin);
+    void** m_end    = field<void**>(game, offsets::kMonstersEnd);
+    void** u_begin  = field<void**>(game, offsets::kUFOsBegin);
+    void** u_end    = field<void**>(game, offsets::kUFOsEnd);
+    void** bh_begin = field<void**>(game, offsets::kBlackHolesBegin);
+    void** bh_end   = field<void**>(game, offsets::kBlackHolesEnd);
+    void** s_begin  = field<void**>(game, offsets::kSpecialsBegin);
+    void** s_end    = field<void**>(game, offsets::kSpecialsEnd);
 
     float best_x = next_rand_x();
     float best_clearance = -1.0f;
@@ -312,33 +340,43 @@ static float pick_non_overlapping_x(void* game, float target_y) {
             if (!p) continue;
             float py = field<float>(p, offsets::kPlatY);
             if (std::fabs(py - target_y) < 28.0f) {
-                float px = field<float>(p, offsets::kPlatX);
-                float dx = std::fabs(px - cx);
+                float dx = std::fabs(field<float>(p, offsets::kPlatX) - cx);
                 if (dx < min_clear) min_clear = dx;
             }
         }
         for (void** it = m_begin; it < m_end; ++it) {
             void* m = *it;
             if (!m) continue;
-            float my = field<float>(m, 0x44);
-            if (std::fabs(my - target_y) < 48.0f) {
-                float mx = field<float>(m, 0x40);
-                float dx = std::fabs(mx - cx);
+            if (std::fabs(field<float>(m, 0x44) - target_y) < 48.0f) {
+                float dx = std::fabs(field<float>(m, 0x40) - cx);
                 if (dx < min_clear) min_clear = dx;
             }
         }
-        if (field<int>(game, offsets::kThemeId) == 0xd) {
-            void** s_begin = field<void**>(game, offsets::kSpecialsBegin);
-            void** s_end   = field<void**>(game, offsets::kSpecialsEnd);
-            for (void** it = s_begin; it < s_end; ++it) {
-                void* s = *it;
-                if (!s) continue;
-                float sx = field<float>(s, 0x28);
-                float sy = field<float>(s, 0x2c);
-                if (sx >= -20.0f && sx <= 340.0f && std::fabs(sy - target_y) < 36.0f) {
-                    float dx = std::fabs(sx - cx);
-                    if (dx < min_clear) min_clear = dx;
-                }
+        for (void** it = u_begin; it < u_end; ++it) {
+            void* u = *it;
+            if (!u) continue;
+            if (std::fabs(field<float>(u, 0x20) - target_y) < 52.0f) {
+                float dx = std::fabs(field<float>(u, 0x1c) - cx);
+                if (dx < min_clear) min_clear = dx;
+            }
+        }
+        for (void** it = bh_begin; it < bh_end; ++it) {
+            void* bh = *it;
+            if (!bh) continue;
+            if (std::fabs(field<float>(bh, 0x04) - target_y) < 52.0f) {
+                float dx = std::fabs(field<float>(bh, 0x00) - cx);
+                if (dx < min_clear) min_clear = dx;
+            }
+        }
+        for (void** it = s_begin; it < s_end; ++it) {
+            void* s = *it;
+            if (!s) continue;
+            int stype = special_get_type(s);
+            float sy  = special_get_y(s);
+            float sx  = special_get_x(s, stype);
+            if (sx >= -40.0f && sx <= 360.0f && std::fabs(sy - target_y) < 40.0f) {
+                float dx = std::fabs(sx - cx);
+                if (dx < min_clear) min_clear = dx;
             }
         }
 
@@ -388,17 +426,18 @@ static void ensure_reachable_gaps(void* game) {
             solid_y[n_solid++] = py;
         }
     }
-    // Also count Winter theme's landable icicle platforms (game+0x7638, x=+0x28, y=+0x2c)
-    // so we never spawn extra normal platforms on top of icicle platform waves.
-    if (field<int>(game, offsets::kThemeId) == 0xd) {
+    // Also count all landable special theme platforms in game+0x7638 across all themes
+    // (type 8 = spike/icicle platforms, type 12 = special landable theme platforms)
+    {
         void** s_begin = field<void**>(game, offsets::kSpecialsBegin);
         void** s_end   = field<void**>(game, offsets::kSpecialsEnd);
         for (void** it = s_begin; it < s_end && n_solid < 64; ++it) {
             void* s = *it;
             if (!s) continue;
-            float sx = field<float>(s, 0x28);
-            float sy = field<float>(s, 0x2c);
-            if (sx >= -20.0f && sx <= 340.0f && sy >= -10.0f && sy <= screen_top + 120.0f) {
+            int stype = special_get_type(s);
+            if (stype != 8 && stype != 12) continue;
+            float sy = special_get_y(s);
+            if (sy >= -10.0f && sy <= screen_top + 120.0f) {
                 solid_y[n_solid++] = sy;
             }
         }
