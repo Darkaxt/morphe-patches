@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/Darkaxt/morphe-patches/compare/v1.3.0...v1.3.1) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** read active theme Doodler sprite from game+0x9010 table ([d197355](https://github.com/Darkaxt/morphe-patches/commit/d19735515271f2931125b711a1bb95598c89f21d))
+
 ## [1.3.0](https://github.com/Darkaxt/morphe-patches/compare/v1.2.1...v1.3.0) (2026-11-23)
 
 ### ✨ New Features
