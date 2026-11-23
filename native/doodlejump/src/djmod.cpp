@@ -399,16 +399,37 @@ static void* pop_platform_from_pool(void* game) {
     return *pool_end;
 }
 
+// Helper to spawn a single-use disappearing platform (type 3) with Doodle Jump's
+// native smooth fade-in animation (fadeState=2, alpha=0.0 -> 1.0 over ~0.17s).
+static void spawn_single_use_bridge(void* game, float new_y, bool fade_in) {
+    void* p = pop_platform_from_pool(game);
+    if (!p) return;
+    fn_platformReset(p);
+    fn_platformSetType(p, 3); // single-use disappearing platform
+    field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
+    field<float>(p, offsets::kPlatY)         = new_y;
+    field<int>(p, offsets::kPlatMoveMode)    = 0;
+    field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
+    if (fade_in) {
+        field<float>(p, 0x58) = 0.0f; // alpha starts at 0.0
+        field<int>(p, 0x5c)   = 2;    // native fade-in state (alpha += 0.1/tick until >= 1.0)
+    }
+    insert_platform_sorted(game, p);
+}
+
 // Guarantees no unpassable vertical gap (> 130 units; max jump height is ~168)
-// between consecutive landable platforms, and keeps the top of the screen populated
-// so platforms appear smoothly at the top edge instead of popping in mid-screen.
-static void ensure_reachable_gaps(void* game) {
+// between consecutive landable platforms, and keeps the top of the screen populated.
+// When `only_above_doodler` is true (normal upward climbing), gaps behind/below the
+// Doodler are left alone so jumping off a single-use platform never spawns a replacement
+// right underneath you; they only fade in if you actually fall back down.
+static void ensure_reachable_gaps(void* game, bool only_above_doodler = false) {
     auto*& pool_b = field<void**>(game, offsets::kPoolBegin);
     auto*& pool_e = field<void**>(game, offsets::kPoolEnd);
     if ((pool_e - pool_b) <= 12) return; // keep healthy pool headroom
 
     float* rect = field<float*>(game, offsets::kScreenRectPtr);
     float screen_top = rect ? (rect[1] + rect[3]) : 600.0f;
+    float doodler_y  = field<float>(game, offsets::kDoodlerY);
 
     // Collect Y coordinates of all currently landable platforms (exclude brown type 2 and broken)
     float solid_y[64];
@@ -421,9 +442,15 @@ static void ensure_reachable_gaps(void* game) {
         int type   = field<int>(p, offsets::kPlatType);
         int broken = field<int>(p, offsets::kPlatBroken);
         if (type == 2 || broken != 0) continue;
-        // Skip fully vanished single-use (type 3) platforms; keep them counted while still fading
-        // so we don't spawn a duplicate right on top of one you just bounced off.
-        if (type == 3 && field<float>(p, 0x58) <= 0.05f) continue;
+        if (type == 3) {
+            int fade_state = field<int>(p, 0x5c);
+            float& alpha   = field<float>(p, 0x58);
+            // Clamp exact 1.0f once native fade-in finishes (checkCollisions tests alpha == 1.0f)
+            if (fade_state == 0 && alpha > 1.0f) alpha = 1.0f;
+            // Skip fully vanished single-use platforms; keep fading-in (state 2) and still-visible
+            // fading-out platforms counted so we don't spawn duplicates.
+            if (fade_state != 2 && alpha <= 0.05f) continue;
+        }
         float py = field<float>(p, offsets::kPlatY);
         if (py >= -10.0f && py <= screen_top + 120.0f) {
             solid_y[n_solid++] = py;
@@ -452,6 +479,8 @@ static void ensure_reachable_gaps(void* game) {
     for (int i = 0; i + 1 < n_solid && added < 4; ++i) {
         float y0 = solid_y[i];
         float y1 = solid_y[i + 1];
+        // While climbing up, don't refill gaps behind/underneath the Doodler
+        if (only_above_doodler && y1 <= doodler_y + 20.0f) continue;
         float gap = y1 - y0;
         if (gap > 130.0f) {
             int pieces = static_cast<int>(gap / 110.0f);
@@ -459,35 +488,19 @@ static void ensure_reachable_gaps(void* game) {
             if (pieces > 3) pieces = 3;
             for (int k = 1; k <= pieces && added < 4; ++k) {
                 if ((pool_e - pool_b) <= 12) break;
-                void* p = pop_platform_from_pool(game);
-                if (!p) break;
                 float new_y = y0 + gap * (static_cast<float>(k) / static_cast<float>(pieces + 1));
-                fn_platformReset(p);
-                fn_platformSetType(p, 3); // single-use disappearing platform
-                field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
-                field<float>(p, offsets::kPlatY)         = new_y;
-                field<int>(p, offsets::kPlatMoveMode)    = 0;
-                field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
-                insert_platform_sorted(game, p);
+                spawn_single_use_bridge(game, new_y, true);
                 added++;
             }
         }
     }
 
     // Keep the top edge populated when a pre-scripted pattern ends well below screen_top,
-    // so bridging platforms scroll in naturally from the top instead of popping in mid-screen.
+    // so bridging platforms fade in smoothly near the top instead of leaving a blank sky.
     float top_y = solid_y[n_solid - 1];
     while (top_y < screen_top - 115.0f && added < 4 && (pool_e - pool_b) > 12) {
-        void* p = pop_platform_from_pool(game);
-        if (!p) break;
         float new_y = top_y + 100.0f;
-        fn_platformReset(p);
-        fn_platformSetType(p, 3); // single-use disappearing platform
-        field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
-        field<float>(p, offsets::kPlatY)         = new_y;
-        field<int>(p, offsets::kPlatMoveMode)    = 0;
-        field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
-        insert_platform_sorted(game, p);
+        spawn_single_use_bridge(game, new_y, true);
         top_y = new_y;
         added++;
     }
@@ -633,22 +646,15 @@ static void scroll_down_with_history(void* game, float scroll_down) {
         }
         int synth = 0;
         while (min_y > 110.0f && cur_world_y > 10.0f && synth < 6) {
-            void* p = pop_platform_from_pool(game);
-            if (!p) break;
+            if ((field<void**>(game, offsets::kPoolEnd) - field<void**>(game, offsets::kPoolBegin)) <= 12) break;
             float new_y = std::max(0.0f, min_y - 90.0f);
-            fn_platformReset(p);
-            fn_platformSetType(p, 3); // single-use disappearing platform
-            field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
-            field<float>(p, offsets::kPlatY)         = new_y;
-            field<int>(p, offsets::kPlatMoveMode)    = 0;
-            field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
-            insert_platform_sorted(game, p);
+            spawn_single_use_bridge(game, new_y, true);
             min_y = new_y;
             synth++;
         }
     }
 
-    ensure_reachable_gaps(game);
+    ensure_reachable_gaps(game, false);
     g_scrollingDown = false;
 }
 
@@ -793,7 +799,8 @@ static void hook_updateGameplay(void* game) {
         field<int>(game, offsets::kIsFallingDead) == 0 &&
         field<int>(game, offsets::kIsBlackHole) == 0 &&
         !g_gameOverArmed) {
-        ensure_reachable_gaps(game);
+        bool climbing_up = (field<float>(game, offsets::kDoodlerVy) >= 0.0f);
+        ensure_reachable_gaps(game, climbing_up);
     }
 
     float& score = field<float>(game, offsets::kScore);
