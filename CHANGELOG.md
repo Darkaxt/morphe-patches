@@ -1,3 +1,9 @@
+## [1.4.2](https://github.com/Darkaxt/morphe-patches/compare/v1.4.1...v1.4.2) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** spawn fallback single-use platforms strictly outside the visible screen area ([24bf6e1](https://github.com/Darkaxt/morphe-patches/commit/24bf6e19cf32d38caf997602fbdabacab95afc12))
+
 ## [1.4.1](https://github.com/Darkaxt/morphe-patches/compare/v1.4.0...v1.4.1) (2026-11-23)
 
 ### 🐛 Bug Fixes
