@@ -32,6 +32,35 @@
       "options": []
     },
     {
+      "name": "Fix 4:3 / Foldable UI Scaling",
+      "description": "Switches Unity CanvasScaler to Expand mode (min of width/height scale) so books, menus, and UI panels fit cleanly on 4:3 tablets and unfolded foldables (such as Galaxy Z Fold) without left/right clipping, while keeping 16:9 and 21:9 screens unchanged.",
+      "default": true,
+      "category": null,
+      "compatiblePackages": [
+        {
+          "packageName": "de.application_systems.TheLonging",
+          "name": "THE LONGING",
+          "description": null,
+          "apkFileType": "APK",
+          "appIconColor": "#5C4033",
+          "signatures": null,
+          "formFactor": "MOBILE",
+          "targets": [
+            {
+              "version": "1.26",
+              "versionCodes": {
+                "ARM64_V8A": 274
+              },
+              "isExperimental": false,
+              "minSdk": 29,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
       "name": "Foldable Seamless Wide View",
       "description": "Zooms out wide/unfolded screens (such as Galaxy Z Fold / 4:3 tablets) to full tall portrait vertical visibility (~600 logical height), centers UI cleanly without 4:3 overlap, remaps touch input, and fills the side margins with seamless cylindrical wrap-around rendering of the playfield.",
       "default": true,
