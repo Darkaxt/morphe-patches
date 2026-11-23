@@ -166,7 +166,7 @@ inline T& field(void* base, size_t off) {
 // 3. Mod configuration & runtime state
 // ============================================================================
 static constexpr int   kMaxLives            = 3;
-static constexpr int   kLifeRecoverStep     = 10000;   // +1 life every 10,000 peak points
+static constexpr int   kLifeRecoverStep     = 10000;   // +1 life per 10,000 clean climb since last damage
 static constexpr float kLowerScrollY        = 150.0f;
 static constexpr float kFloorBounceY        = 28.0f;
 static constexpr float kNormalJumpVy        = 9.0f;
@@ -193,9 +193,9 @@ struct Vec2 {
 
 // Endless Fall & 3-Lives state
 static std::vector<SavedPlatform> g_belowScreen;
-static int   g_lives              = kMaxLives;
-static int   g_nextLifeMilestone  = kLifeRecoverStep;
-static float g_peakScore          = 0.0f;
+static int   g_lives             = kMaxLives;
+static float g_lifeRecoverTarget = 0.0f;
+static float g_peakScore         = 0.0f;
 static float g_invulnTimer    = 0.0f;
 static float g_damageFlash    = 0.0f;
 static bool  g_scrollingDown  = false;
@@ -412,7 +412,10 @@ static void apply_fall_damage(void* game, int dmg) {
     g_lives = std::max(0, g_lives - dmg);
     g_damageFlash = 0.6f;
     LOGI("Fall damage: -%d life (remaining: %d)", dmg, g_lives);
-    if (g_lives <= 0) {
+    if (g_lives > 0) {
+        float cur_score = std::max(0.0f, field<float>(game, offsets::kScore));
+        g_lifeRecoverTarget = cur_score + static_cast<float>(kLifeRecoverStep);
+    } else {
         // Trigger vanilla's normal falling-death transition so sound, cleanup,
         // hook_triggerGameOver (peak score), and the Game Over menu all run cleanly.
         g_gameOverArmed = true;
@@ -426,7 +429,7 @@ static void apply_fall_damage(void* game, int dmg) {
 static void hook_resetLevel(void* game) {
     g_belowScreen.clear();
     g_lives             = kMaxLives;
-    g_nextLifeMilestone = kLifeRecoverStep;
+    g_lifeRecoverTarget = 0.0f;
     g_peakScore         = 0.0f;
     g_invulnTimer    = 0.0f;
     g_damageFlash    = 0.0f;
@@ -521,14 +524,13 @@ static void hook_updateGameplay(void* game) {
 
     float& score = field<float>(game, offsets::kScore);
     if (score < 0.0f) score = 0.0f;
-    if (score > g_peakScore) {
-        g_peakScore = score;
-        while (g_peakScore >= static_cast<float>(g_nextLifeMilestone)) {
-            if (g_lives > 0 && g_lives < kMaxLives) {
-                g_lives += 1;
-                LOGI("Life recovered at %d pts (lives: %d)", g_nextLifeMilestone, g_lives);
-            }
-            g_nextLifeMilestone += kLifeRecoverStep;
+    if (score > g_peakScore) g_peakScore = score;
+    if (g_lives > 0 && g_lives < kMaxLives && score >= g_lifeRecoverTarget) {
+        g_lives += 1;
+        LOGI("Life recovered after +%d clean climb (score=%.0f, lives=%d)",
+             kLifeRecoverStep, score, g_lives);
+        if (g_lives < kMaxLives) {
+            g_lifeRecoverTarget = score + static_cast<float>(kLifeRecoverStep);
         }
     }
 
@@ -620,6 +622,8 @@ static void hook_checkCollisions(void* game) {
     LOGI("Monster/UFO hit -> -1 life (remaining: %d)", g_lives);
 
     if (g_lives > 0) {
+        float cur_score = std::max(0.0f, field<float>(game, offsets::kScore));
+        g_lifeRecoverTarget = cur_score + static_cast<float>(kLifeRecoverStep);
         g_invulnTimer = kInvulnDuration;
         cancel_ko();
     }
