@@ -297,6 +297,63 @@ static void* pop_platform_from_pool(void* game) {
     return *pool_end;
 }
 
+// Guarantees no unpassable vertical gap (> 130 units; max jump height is ~168)
+// between consecutive landable platforms after falling back down, using up
+// disappearing/spring platforms, or restoring history.
+static void ensure_reachable_gaps(void* game) {
+    auto*& pool_b = field<void**>(game, offsets::kPoolBegin);
+    auto*& pool_e = field<void**>(game, offsets::kPoolEnd);
+    if ((pool_e - pool_b) <= 12) return; // keep healthy pool headroom
+
+    float* rect = field<float*>(game, offsets::kScreenRectPtr);
+    float screen_top = rect ? (rect[1] + rect[3]) : 600.0f;
+
+    // Collect Y coordinates of all currently landable platforms (exclude brown type 2 and broken)
+    float solid_y[64];
+    int n_solid = 0;
+    void** begin = field<void**>(game, offsets::kPlatformsBegin);
+    void** end   = field<void**>(game, offsets::kPlatformsEnd);
+    for (void** it = begin; it < end && n_solid < 64; ++it) {
+        void* p = *it;
+        if (!p) continue;
+        int type   = field<int>(p, offsets::kPlatType);
+        int broken = field<int>(p, offsets::kPlatBroken);
+        if (type == 2 || broken != 0) continue;
+        float py = field<float>(p, offsets::kPlatY);
+        if (py >= -10.0f && py <= screen_top + 40.0f) {
+            solid_y[n_solid++] = py;
+        }
+    }
+    if (n_solid < 2) return;
+    std::sort(solid_y, solid_y + n_solid);
+
+    int added = 0;
+    for (int i = 0; i + 1 < n_solid && added < 4; ++i) {
+        float y0 = solid_y[i];
+        float y1 = solid_y[i + 1];
+        float gap = y1 - y0;
+        if (gap > 130.0f) {
+            int pieces = static_cast<int>(gap / 110.0f);
+            if (pieces < 1) pieces = 1;
+            if (pieces > 3) pieces = 3;
+            for (int k = 1; k <= pieces && added < 4; ++k) {
+                if ((pool_e - pool_b) <= 12) break;
+                void* p = pop_platform_from_pool(game);
+                if (!p) break;
+                float new_y = y0 + gap * (static_cast<float>(k) / static_cast<float>(pieces + 1));
+                fn_platformReset(p);
+                fn_platformSetType(p, 0);
+                field<float>(p, offsets::kPlatX)         = next_rand_x();
+                field<float>(p, offsets::kPlatY)         = new_y;
+                field<int>(p, offsets::kPlatMoveMode)    = 0;
+                field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
+                insert_platform_sorted(game, p);
+                added++;
+            }
+        }
+    }
+}
+
 static void scroll_down_with_history(void* game, float scroll_down) {
     g_scrollingDown = true;
 
@@ -452,6 +509,7 @@ static void scroll_down_with_history(void* game, float scroll_down) {
         }
     }
 
+    ensure_reachable_gaps(game);
     g_scrollingDown = false;
 }
 
@@ -557,6 +615,12 @@ static void hook_updateGameplay(void* game) {
 
     if (phase == 6 && is_playing == 1 && falling_dead == 0 && black_hole == 0 &&
         hit_hazard == 0 && g_lives > 0 && !g_gameOverArmed) {
+        static float s_gap_check_accum = 0.0f;
+        s_gap_check_accum += dt;
+        if (s_gap_check_accum >= 0.30f) {
+            s_gap_check_accum = 0.0f;
+            ensure_reachable_gaps(game);
+        }
         float& dy = field<float>(game, offsets::kDoodlerY);
         float& vy = field<float>(game, offsets::kDoodlerVy);
         float& wy = field<float>(game, offsets::kWorldY);
