@@ -1,3 +1,9 @@
+## [1.3.5](https://github.com/Darkaxt/morphe-patches/compare/v1.3.4...v1.3.5) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** bridge post-pattern vertical gaps immediately off-top instead of after delay ([71a475e](https://github.com/Darkaxt/morphe-patches/commit/71a475e2e92d2b3f8925a4fe25224045a06bdf71))
+
 ## [1.3.4](https://github.com/Darkaxt/morphe-patches/compare/v1.3.3...v1.3.4) (2026-11-23)
 
 ### 🐛 Bug Fixes
