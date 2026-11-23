@@ -8,6 +8,29 @@
 
 ### 🐛 Bug Fixes
 
+* **doodlejump:** bridge off-screen pattern-jump gaps up to screen_top+300 and fade in softlock rescues when falling ([7cc015b](https://github.com/Darkaxt/morphe-patches/commit/7cc015b385bf5b2ec663630adea2099d83a11c58))
+* **doodlejump:** bridge post-pattern vertical gaps immediately off-top instead of after delay ([71a475e](https://github.com/Darkaxt/morphe-patches/commit/71a475e2e92d2b3f8925a4fe25224045a06bdf71))
+* **doodlejump:** bridge unreachable >130-unit vertical platform gaps during climbing and falling ([55799d9](https://github.com/Darkaxt/morphe-patches/commit/55799d98f729e04f2fdde1393edbb401ebd83f40))
+* **doodlejump:** end run immediately at 0 lives on monster/UFO KO and restore GLES texture/env state ([a575b96](https://github.com/Darkaxt/morphe-patches/commit/a575b96d21120da730fc7871f8666a522d653ff1))
+* **doodlejump:** handle all theme special platforms/hazards polymorphically via vtable across all 17 themes ([bffc3c4](https://github.com/Darkaxt/morphe-patches/commit/bffc3c4d3af9a419361bcfaac36106c1e3d969bf))
+* **doodlejump:** link libc++ statically so libDoodleJump.so has no libc++_shared.so dependency ([320246e](https://github.com/Darkaxt/morphe-patches/commit/320246e6a2c3b7d4b8e97ef16fc8d26b32731266))
+* **doodlejump:** preserve sorted platform history and prevent empty-screen gaps on fall ([e526860](https://github.com/Darkaxt/morphe-patches/commit/e526860eed1ea85d31fd6d4d88b9051f44283f12))
+* **doodlejump:** read active theme Doodler sprite from game+0x9010 table ([d197355](https://github.com/Darkaxt/morphe-patches/commit/d19735515271f2931125b711a1bb95598c89f21d))
+* **doodlejump:** recognize Winter icicle platforms, prevent platform/monster overlap, and keep top edge populated ([e94f74d](https://github.com/Darkaxt/morphe-patches/commit/e94f74d6224a27b41b2593fe5911ef363c363e63))
+* **doodlejump:** recover +1 life per 10,000 clean climb since last damage ([a0bf18f](https://github.com/Darkaxt/morphe-patches/commit/a0bf18f17bee5b13c511dc95bf75c06919c2b28b))
+* **doodlejump:** skip bridging below Doodler while climbing and animate injected platforms with native fade-in ([29e71d4](https://github.com/Darkaxt/morphe-patches/commit/29e71d49f9dc6d1628fff25ac94987e0938b7f5c))
+* **doodlejump:** spawn fallback single-use platforms strictly outside the visible screen area ([24bf6e1](https://github.com/Darkaxt/morphe-patches/commit/24bf6e19cf32d38caf997602fbdabacab95afc12))
+
+## [1.1.0-dev.4](https://github.com/Darkaxt/morphe-patches/compare/v1.1.0-dev.3...v1.1.0-dev.4) (2026-11-23)
+
+### ✨ New Features
+
+* **doodlejump:** fix pool exhaustion, monster knockback, Game Over transition, top-bar HUD, and +1 life per 10k pts ([390df2e](https://github.com/Darkaxt/morphe-patches/commit/390df2ecf94b9d5fd355b580ff530770f302f6b7))
+* **doodlejump:** render life icons using the active theme's Doodler sprite ([8d0e9dc](https://github.com/Darkaxt/morphe-patches/commit/8d0e9dc082c347e94e007bd6d923e0031839edc4))
+* **doodlejump:** use single-use disappearing platforms (type 3) for injected gap bridges ([56d7233](https://github.com/Darkaxt/morphe-patches/commit/56d723369850a6bec824c076cc1e297158e349dd))
+
+### 🐛 Bug Fixes
+
 * **doodlejump:** bridge post-pattern vertical gaps immediately off-top instead of after delay ([71a475e](https://github.com/Darkaxt/morphe-patches/commit/71a475e2e92d2b3f8925a4fe25224045a06bdf71))
 * **doodlejump:** bridge unreachable >130-unit vertical platform gaps during climbing and falling ([55799d9](https://github.com/Darkaxt/morphe-patches/commit/55799d98f729e04f2fdde1393edbb401ebd83f40))
 * **doodlejump:** end run immediately at 0 lives on monster/UFO KO and restore GLES texture/env state ([a575b96](https://github.com/Darkaxt/morphe-patches/commit/a575b96d21120da730fc7871f8666a522d653ff1))
