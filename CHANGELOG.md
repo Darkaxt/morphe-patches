@@ -1,3 +1,9 @@
+## [1.3.7](https://github.com/Darkaxt/morphe-patches/compare/v1.3.6...v1.3.7) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** handle all theme special platforms/hazards polymorphically via vtable across all 17 themes ([bffc3c4](https://github.com/Darkaxt/morphe-patches/commit/bffc3c4d3af9a419361bcfaac36106c1e3d969bf))
+
 ## [1.3.6](https://github.com/Darkaxt/morphe-patches/compare/v1.3.5...v1.3.6) (2026-11-23)
 
 ### 🐛 Bug Fixes
