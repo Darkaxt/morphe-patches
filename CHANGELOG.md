@@ -1,3 +1,13 @@
+## [1.3.0](https://github.com/Darkaxt/morphe-patches/compare/v1.2.1...v1.3.0) (2026-11-23)
+
+### ✨ New Features
+
+* **doodlejump:** render life icons using the active theme's Doodler sprite ([8d0e9dc](https://github.com/Darkaxt/morphe-patches/commit/8d0e9dc082c347e94e007bd6d923e0031839edc4))
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** recover +1 life per 10,000 clean climb since last damage ([a0bf18f](https://github.com/Darkaxt/morphe-patches/commit/a0bf18f17bee5b13c511dc95bf75c06919c2b28b))
+
 ## [1.2.1](https://github.com/Darkaxt/morphe-patches/compare/v1.2.0...v1.2.1) (2026-11-23)
 
 ### 🐛 Bug Fixes
