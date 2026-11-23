@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-23T01:02:37",
-  "description": "## [1.3.3](https://github.com/Darkaxt/morphe-patches/compare/v1.3.2...v1.3.3) (2026-11-23)\n\n### 🐛 Bug Fixes\n\n* **doodlejump:** preserve sorted platform history and prevent empty-screen gaps on fall ([e526860](https://github.com/Darkaxt/morphe-patches/commit/e526860eed1ea85d31fd6d4d88b9051f44283f12))",
-  "download_url": "https://github.com/Darkaxt/morphe-patches/releases/download/v1.3.3/patches-1.3.3.mpp",
+  "created_at": "2026-11-23T01:36:11",
+  "description": "## [1.3.4](https://github.com/Darkaxt/morphe-patches/compare/v1.3.3...v1.3.4) (2026-11-23)\n\n### 🐛 Bug Fixes\n\n* **doodlejump:** bridge unreachable >130-unit vertical platform gaps during climbing and falling ([55799d9](https://github.com/Darkaxt/morphe-patches/commit/55799d98f729e04f2fdde1393edbb401ebd83f40))",
+  "download_url": "https://github.com/Darkaxt/morphe-patches/releases/download/v1.3.4/patches-1.3.4.mpp",
   "signature_download_url": "",
-  "version": "1.3.3"
+  "version": "1.3.4"
 }

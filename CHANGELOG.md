@@ -1,3 +1,9 @@
+## [1.3.4](https://github.com/Darkaxt/morphe-patches/compare/v1.3.3...v1.3.4) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** bridge unreachable >130-unit vertical platform gaps during climbing and falling ([55799d9](https://github.com/Darkaxt/morphe-patches/commit/55799d98f729e04f2fdde1393edbb401ebd83f40))
+
 ## [1.3.3](https://github.com/Darkaxt/morphe-patches/compare/v1.3.2...v1.3.3) (2026-11-23)
 
 ### 🐛 Bug Fixes
