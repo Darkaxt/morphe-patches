@@ -250,7 +250,9 @@ static SetFloatFn        fn_setScaleY         = nullptr;
 // ============================================================================
 // 4. Endless Fall & 3-Lives helpers + hooks
 // ============================================================================
-static void insert_platform_front(void* game, void* plat) {
+// Insert `plat` into `game`'s active platforms vector keeping ascending Y order,
+// so platforms[0] is always the lowest (for cullOffscreen) and platforms.back() is always highest.
+static void insert_platform_sorted(void* game, void* plat) {
     auto*& begin = field<void**>(game, offsets::kPlatformsBegin);
     auto*& end   = field<void**>(game, offsets::kPlatformsEnd);
     auto*& cap   = field<void**>(game, offsets::kPlatformsCap);
@@ -263,11 +265,28 @@ static void insert_platform_front(void* game, void* plat) {
         return;
     }
 
-    if (count > 0) {
-        std::memmove(begin + 1, begin, count * sizeof(void*));
+    float py = field<float>(plat, offsets::kPlatY);
+    size_t pos = 0;
+    while (pos < count) {
+        void* cur = begin[pos];
+        if (cur && field<float>(cur, offsets::kPlatY) >= py) {
+            break;
+        }
+        ++pos;
     }
-    begin[0] = plat;
+
+    if (pos < count) {
+        std::memmove(begin + pos + 1, begin + pos, (count - pos) * sizeof(void*));
+    }
+    begin[pos] = plat;
     end = begin + count + 1;
+}
+
+static uint32_t g_rng_state = 0x13579bdfu;
+static float next_rand_x() {
+    g_rng_state = g_rng_state * 1664525u + 1013904223u;
+    float u = static_cast<float>((g_rng_state >> 8) & 0xFFFFu) / 65535.0f;
+    return 32.0f + u * 256.0f;
 }
 
 static void* pop_platform_from_pool(void* game) {
@@ -399,9 +418,38 @@ static void scroll_down_with_history(void* game, float scroll_down) {
         field<int>(p, offsets::kPlatMoveMode)    = sp.moveMode;
         field<float>(p, offsets::kPlatMoveSpeed) = sp.moveSpeed;
 
-        insert_platform_front(game, p);
+        insert_platform_sorted(game, p);
         g_belowScreen.pop_back();
         restored++;
+    }
+
+    // Safety net: never allow a large empty gap at the bottom while falling down
+    // (e.g. after a broken-platform section or fast jetpack/rocket ascent).
+    {
+        auto*& b = field<void**>(game, offsets::kPlatformsBegin);
+        auto*& e = field<void**>(game, offsets::kPlatformsEnd);
+        float min_y = 9999.0f;
+        for (void** it = b; it < e; ++it) {
+            if (*it) {
+                float py = field<float>(*it, offsets::kPlatY);
+                if (py < min_y) min_y = py;
+            }
+        }
+        int synth = 0;
+        while (min_y > 110.0f && cur_world_y > 10.0f && synth < 6) {
+            void* p = pop_platform_from_pool(game);
+            if (!p) break;
+            float new_y = std::max(0.0f, min_y - 90.0f);
+            fn_platformReset(p);
+            fn_platformSetType(p, 0); // solid normal platform
+            field<float>(p, offsets::kPlatX)         = next_rand_x();
+            field<float>(p, offsets::kPlatY)         = new_y;
+            field<int>(p, offsets::kPlatMoveMode)    = 0;
+            field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
+            insert_platform_sorted(game, p);
+            min_y = new_y;
+            synth++;
+        }
     }
 
     g_scrollingDown = false;
@@ -450,12 +498,11 @@ static void hook_cullOffscreen(void* game) {
     void* protected_plat = field<void*>(game, offsets::kProtectedPlatform);
     float cur_world_y = field<float>(game, offsets::kWorldY);
 
-    int scanned = 0;
-    for (void** it = begin; it < end && scanned < 25; ++it, ++scanned) {
+    for (void** it = begin; it < end; ++it) {
         void* p = *it;
         if (!p || p == protected_plat) continue;
         float py = field<float>(p, offsets::kPlatY);
-        if (py >= -6.0f) break;
+        if (py >= -6.0f) continue;
 
         int type = field<int>(p, offsets::kPlatType);
         int broken = field<int>(p, offsets::kPlatBroken);
@@ -468,8 +515,25 @@ static void hook_cullOffscreen(void* game) {
         sp.moveMode  = field<int>(p, offsets::kPlatMoveMode);
         sp.moveSpeed = field<float>(p, offsets::kPlatMoveSpeed);
 
-        if (g_belowScreen.empty() || sp.worldY >= g_belowScreen.back().worldY - 1.0f) {
-            g_belowScreen.push_back(sp);
+        // Insert in sorted ascending worldY order (avoiding near-duplicate entries)
+        auto ins = std::lower_bound(
+            g_belowScreen.begin(), g_belowScreen.end(), sp.worldY,
+            [](const SavedPlatform& a, float wy) { return a.worldY < wy; });
+        bool dup = false;
+        if (ins != g_belowScreen.end() &&
+            std::fabs(ins->worldY - sp.worldY) < 2.0f &&
+            std::fabs(ins->x - sp.x) < 4.0f) {
+            dup = true;
+        }
+        if (!dup && ins != g_belowScreen.begin()) {
+            auto prev = ins - 1;
+            if (std::fabs(prev->worldY - sp.worldY) < 2.0f &&
+                std::fabs(prev->x - sp.x) < 4.0f) {
+                dup = true;
+            }
+        }
+        if (!dup) {
+            g_belowScreen.insert(ins, sp);
         }
     }
 
