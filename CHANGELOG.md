@@ -1,3 +1,9 @@
+## [1.4.3](https://github.com/Darkaxt/morphe-patches/compare/v1.4.2...v1.4.3) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** bridge off-screen pattern-jump gaps up to screen_top+300 and fade in softlock rescues when falling ([7cc015b](https://github.com/Darkaxt/morphe-patches/commit/7cc015b385bf5b2ec663630adea2099d83a11c58))
+
 ## [1.4.2](https://github.com/Darkaxt/morphe-patches/compare/v1.4.1...v1.4.2) (2026-11-23)
 
 ### 🐛 Bug Fixes
