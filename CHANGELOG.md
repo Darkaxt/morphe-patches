@@ -1,3 +1,9 @@
+## [1.3.6](https://github.com/Darkaxt/morphe-patches/compare/v1.3.5...v1.3.6) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** recognize Winter icicle platforms, prevent platform/monster overlap, and keep top edge populated ([e94f74d](https://github.com/Darkaxt/morphe-patches/commit/e94f74d6224a27b41b2593fe5911ef363c363e63))
+
 ## [1.3.5](https://github.com/Darkaxt/morphe-patches/compare/v1.3.4...v1.3.5) (2026-11-23)
 
 ### 🐛 Bug Fixes
