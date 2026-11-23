@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/Darkaxt/morphe-patches/compare/v1.4.3...v1.5.0) (2026-11-23)
+
+### ✨ New Features
+
+* **thelonging:** add Fix 4:3 / Foldable UI Scaling patch (Unity CanvasScaler Expand mode) ([b6cba0a](https://github.com/Darkaxt/morphe-patches/commit/b6cba0a79286d7ca640089090260fd5b2ce76e25))
+
 ## [1.4.3](https://github.com/Darkaxt/morphe-patches/compare/v1.4.2...v1.4.3) (2026-11-23)
 
 ### 🐛 Bug Fixes
