@@ -399,9 +399,9 @@ static void* pop_platform_from_pool(void* game) {
     return *pool_end;
 }
 
-// Helper to spawn a single-use disappearing platform (type 3) off-screen
-// so it scrolls naturally into the visible area with zero mid-screen pop-in.
-static void spawn_single_use_bridge(void* game, float new_y) {
+// Helper to spawn a single-use disappearing platform (type 3).
+// When `fade_in` is true, uses Doodle Jump's native smooth opacity fade-in (fadeState=2).
+static void spawn_single_use_bridge(void* game, float new_y, bool fade_in) {
     void* p = pop_platform_from_pool(game);
     if (!p) return;
     fn_platformReset(p);
@@ -410,15 +410,20 @@ static void spawn_single_use_bridge(void* game, float new_y) {
     field<float>(p, offsets::kPlatY)         = new_y;
     field<int>(p, offsets::kPlatMoveMode)    = 0;
     field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
+    if (fade_in) {
+        field<float>(p, 0x58) = 0.0f;
+        field<int>(p, 0x5c)   = 2; // native fade-in (alpha += 0.1/tick until >= 1.0)
+    }
     insert_platform_sorted(game, p);
 }
 
-// Guarantees no unpassable vertical gap (> 130 units; max jump height is ~168)
-// by spawning single-use bridging platforms ONLY outside the visible screen area:
-//   - Above the top edge (y = screen_top + 10) whenever the highest landable
-//     platform drops to <= screen_top - 105 (gap ~115, 100% off-screen).
-//   - Below the bottom edge (y = -12) during downward scroll whenever the lowest
-//     landable platform rises to >= 105 (gap ~117, 100% off-screen).
+// Guarantees no unpassable vertical gap (> 130 units; max jump height is ~168):
+// 1. Off-screen first (zero visible pop-in): scans up to screen_top + 300 and bridges
+//    any >130-unit gap above the visible top edge (y >= screen_top + 6) as soon as new
+//    platforms/patterns spawn, plus keeps top_y <= screen_top - 105 populated at screen_top + 10.
+// 2. Softlock rescue only when falling (vy < 0): if an unreachable >135-unit gap still
+//    sits directly above the Doodler (e.g. after using a single-use platform and falling
+//    back down), smoothly fades in a single-use bridge instead of trapping the player.
 static void ensure_reachable_gaps(void* game) {
     auto*& pool_b = field<void**>(game, offsets::kPoolBegin);
     auto*& pool_e = field<void**>(game, offsets::kPoolEnd);
@@ -426,21 +431,29 @@ static void ensure_reachable_gaps(void* game) {
 
     float* rect = field<float*>(game, offsets::kScreenRectPtr);
     float screen_top = rect ? (rect[1] + rect[3]) : 600.0f;
+    float doodler_y  = field<float>(game, offsets::kDoodlerY);
+    float doodler_vy = field<float>(game, offsets::kDoodlerVy);
 
-    // Find the highest landable platform near/above the visible screen
-    float top_y = -9999.0f;
+    // Collect Y coordinates of all currently landable platforms up to screen_top + 300
+    float solid_y[64];
+    int n_solid = 0;
     void** begin = field<void**>(game, offsets::kPlatformsBegin);
     void** end   = field<void**>(game, offsets::kPlatformsEnd);
-    for (void** it = begin; it < end; ++it) {
+    for (void** it = begin; it < end && n_solid < 64; ++it) {
         void* p = *it;
         if (!p) continue;
         int type   = field<int>(p, offsets::kPlatType);
         int broken = field<int>(p, offsets::kPlatBroken);
         if (type == 2 || broken != 0) continue;
-        if (type == 3 && field<int>(p, 0x5c) != 0) continue; // skip used single-use platforms
+        if (type == 3) {
+            int fade_state = field<int>(p, 0x5c);
+            float& alpha   = field<float>(p, 0x58);
+            if (fade_state == 0 && alpha > 1.0f) alpha = 1.0f;
+            if (fade_state != 2 && alpha <= 0.05f) continue;
+        }
         float py = field<float>(p, offsets::kPlatY);
-        if (py >= -20.0f && py <= screen_top + 140.0f && py > top_y) {
-            top_y = py;
+        if (py >= -20.0f && py <= screen_top + 300.0f) {
+            solid_y[n_solid++] = py;
         }
     }
     // Also count all landable special theme platforms in game+0x7638 across all themes
@@ -448,21 +461,64 @@ static void ensure_reachable_gaps(void* game) {
     {
         void** s_begin = field<void**>(game, offsets::kSpecialsBegin);
         void** s_end   = field<void**>(game, offsets::kSpecialsEnd);
-        for (void** it = s_begin; it < s_end; ++it) {
+        for (void** it = s_begin; it < s_end && n_solid < 64; ++it) {
             void* s = *it;
             if (!s) continue;
             int stype = special_get_type(s);
             if (stype != 8 && stype != 12) continue;
             float sy = special_get_y(s);
-            if (sy >= -20.0f && sy <= screen_top + 140.0f && sy > top_y) {
-                top_y = sy;
+            if (sy >= -20.0f && sy <= screen_top + 300.0f) {
+                solid_y[n_solid++] = sy;
+            }
+        }
+    }
+    if (n_solid < 1) return;
+    std::sort(solid_y, solid_y + n_solid);
+
+    int added = 0;
+    for (int i = 0; i + 1 < n_solid && added < 4; ++i) {
+        float y0 = solid_y[i];
+        float y1 = solid_y[i + 1];
+        float gap = y1 - y0;
+        if (gap <= 130.0f) continue;
+
+        // Case 1: Gap extends above screen_top -> bridge strictly OFF-SCREEN above screen_top!
+        if (y1 >= screen_top + 6.0f) {
+            float first_y = std::max(screen_top + 6.0f, y0 + 105.0f);
+            if (first_y - y0 <= 130.0f && first_y < y1 - 20.0f) {
+                while (first_y < y1 - 120.0f && added < 4 && (pool_e - pool_b) > 12) {
+                    spawn_single_use_bridge(game, first_y, false);
+                    first_y += 105.0f;
+                    added++;
+                }
+                if (first_y < y1 - 20.0f && added < 4 && (pool_e - pool_b) > 12) {
+                    spawn_single_use_bridge(game, first_y, false);
+                    added++;
+                }
+                continue;
+            }
+        }
+
+        // Case 2: On-screen softlock rescue — ONLY when falling (vy < 0) and trapped below
+        // an unreachable (>135) gap directly above the Doodler. Uses smooth native fade-in.
+        if (doodler_vy < 0.0f && gap > 135.0f &&
+            y0 <= doodler_y + 30.0f && y1 > doodler_y + 30.0f) {
+            int pieces = static_cast<int>(gap / 110.0f);
+            if (pieces < 1) pieces = 1;
+            if (pieces > 3) pieces = 3;
+            for (int k = 1; k <= pieces && added < 4; ++k) {
+                if ((pool_e - pool_b) <= 12) break;
+                float new_y = y0 + gap * (static_cast<float>(k) / static_cast<float>(pieces + 1));
+                spawn_single_use_bridge(game, new_y, true);
+                added++;
             }
         }
     }
 
-    // Spawn strictly above the visible area (screen_top + 10) before the gap exceeds jump reach
-    if (top_y > -1000.0f && top_y <= screen_top - 105.0f && (pool_e - pool_b) > 12) {
-        spawn_single_use_bridge(game, screen_top + 10.0f);
+    // Keep the top edge populated strictly off-screen (screen_top + 10)
+    float top_y = solid_y[n_solid - 1];
+    if (top_y <= screen_top - 105.0f && added < 4 && (pool_e - pool_b) > 12) {
+        spawn_single_use_bridge(game, screen_top + 10.0f, false);
     }
 }
 
@@ -608,7 +664,7 @@ static void scroll_down_with_history(void* game, float scroll_down) {
         // platform has risen >= 105 units above the bottom edge while falling down.
         if (min_y >= 105.0f && cur_world_y > 10.0f &&
             (field<void**>(game, offsets::kPoolEnd) - field<void**>(game, offsets::kPoolBegin)) > 12) {
-            spawn_single_use_bridge(game, -12.0f);
+            spawn_single_use_bridge(game, -12.0f, false);
         }
     }
 
