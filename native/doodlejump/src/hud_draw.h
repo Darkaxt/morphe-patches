@@ -101,10 +101,66 @@ inline void draw_text_3x5(const char* text, float x, float y, float px,
     }
 }
 
+// Draws the actual themed Doodler sprite from the game's Sprite struct:
+//   +0x00: GLuint texId
+//   +0x28: float halfWidth
+//   +0x2c: float halfHeight
+//   +0x30: float uvs[8] (GL_TRIANGLE_STRIP)
+// Returns true if drawn via sprite, false if caller should fall back to draw_mini_doodler.
+inline bool draw_themed_doodler(const void* sprite, float cx, float cy,
+                                float target_h, bool alive, float alpha = 1.0f) {
+    if (!sprite) return false;
+    const auto* p = static_cast<const uint8_t*>(sprite);
+    GLuint tex_id = *reinterpret_cast<const GLuint*>(p + 0x00);
+    float hw = *reinterpret_cast<const float*>(p + 0x28);
+    float hh = *reinterpret_cast<const float*>(p + 0x2c);
+    if (tex_id == 0 || hw <= 1.0f || hh <= 1.0f || hw > 256.0f || hh > 256.0f) {
+        return false;
+    }
+
+    float scale = (target_h * 0.5f) / hh;
+    float dw = hw * scale;
+    float dh = hh * scale;
+
+    const GLfloat verts[8] = {
+        cx - dw, cy - dh,
+        cx + dw, cy - dh,
+        cx - dw, cy + dh,
+        cx + dw, cy + dh,
+    };
+    const auto* uvs = reinterpret_cast<const GLfloat*>(p + 0x30);
+
+    GLint prev_env = GL_REPLACE;
+    glGetTexEnviv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, &prev_env);
+
+    glEnable(GL_TEXTURE_2D);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+    if (alive) {
+        glColor4f(alpha, alpha, alpha, alpha);
+    } else {
+        glColor4f(0.10f * alpha, 0.10f * alpha, 0.10f * alpha, 0.35f * alpha);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, tex_id);
+    glTexCoordPointer(2, GL_FLOAT, 0, uvs);
+    glVertexPointer(2, GL_FLOAT, 0, verts);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, prev_env);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisable(GL_TEXTURE_2D);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    return true;
+}
+
 inline void render_overlay(int lives, int max_lives, int peak_score,
                            float screen_left, float screen_width,
                            float screen_height, float top_inset,
-                           float invuln_timer, float damage_flash) {
+                           float invuln_timer, float damage_flash,
+                           const void* doodler_sprite = nullptr) {
     // Save GLES 1.1 state we touch
     GLboolean tex_enabled = glIsEnabled(GL_TEXTURE_2D);
     GLboolean blend_enabled = glIsEnabled(GL_BLEND);
@@ -124,7 +180,7 @@ inline void render_overlay(int lives, int max_lives, int peak_score,
 
     // Place lives + peak score cleanly inside the vanilla top HUD bar (between score and pause)
     float bar_center_y = screen_height - top_inset - 21.0f;
-    float icons_x = screen_left + 118.0f;
+    float icons_x = screen_left + 114.0f;
 
     // Blink icons gently while invulnerable
     float icon_alpha = 1.0f;
@@ -133,7 +189,11 @@ inline void render_overlay(int lives, int max_lives, int peak_score,
     }
 
     for (int i = 0; i < max_lives; ++i) {
-        draw_mini_doodler(icons_x + i * 19.0f, bar_center_y - 1.0f, 0.72f, i < lives, icon_alpha);
+        float cx = icons_x + i * 21.0f;
+        float cy = bar_center_y - 1.0f;
+        if (!draw_themed_doodler(doodler_sprite, cx, cy, 24.0f, i < lives, icon_alpha)) {
+            draw_mini_doodler(cx, cy, 0.72f, i < lives, icon_alpha);
+        }
     }
 
     // Peak score label neatly inside the right-center of the top bar (left of pause button)
