@@ -144,6 +144,9 @@ constexpr size_t kUFOsBegin          = 0x7590; // void** (item +0x20 = float y)
 constexpr size_t kUFOsEnd            = 0x7598; // void**
 constexpr size_t kMonstersBegin      = 0x75c0; // void** (item +0x44 = float y)
 constexpr size_t kMonstersEnd        = 0x75c8; // void**
+constexpr size_t kSpecialsBegin      = 0x7638; // void** (theme objects, e.g. Winter icicle platforms)
+constexpr size_t kSpecialsEnd        = 0x7640; // void**
+constexpr size_t kThemeId            = 0x2c0;  // int (0xd = Winter/Ice)
 constexpr size_t kActiveUFOCount     = 0x74c8; // int
 constexpr size_t kActiveMonsterCount = 0x74cc; // int
 constexpr size_t kProtectedPlatform  = 0x8580; // void*
@@ -286,7 +289,68 @@ static uint32_t g_rng_state = 0x13579bdfu;
 static float next_rand_x() {
     g_rng_state = g_rng_state * 1664525u + 1013904223u;
     float u = static_cast<float>((g_rng_state >> 8) & 0xFFFFu) / 65535.0f;
-    return 32.0f + u * 256.0f;
+    return 36.0f + u * 248.0f;
+}
+
+// Picks an X coordinate in [36, 284] at `target_y` that does not overlap any
+// existing platform (including brown/crumbling/icicle/moving) or monster.
+static float pick_non_overlapping_x(void* game, float target_y) {
+    void** p_begin = field<void**>(game, offsets::kPlatformsBegin);
+    void** p_end   = field<void**>(game, offsets::kPlatformsEnd);
+    void** m_begin = field<void**>(game, offsets::kMonstersBegin);
+    void** m_end   = field<void**>(game, offsets::kMonstersEnd);
+
+    float best_x = next_rand_x();
+    float best_clearance = -1.0f;
+
+    for (int attempt = 0; attempt < 12; ++attempt) {
+        float cx = (attempt == 0) ? best_x : next_rand_x();
+        float min_clear = 9999.0f;
+
+        for (void** it = p_begin; it < p_end; ++it) {
+            void* p = *it;
+            if (!p) continue;
+            float py = field<float>(p, offsets::kPlatY);
+            if (std::fabs(py - target_y) < 28.0f) {
+                float px = field<float>(p, offsets::kPlatX);
+                float dx = std::fabs(px - cx);
+                if (dx < min_clear) min_clear = dx;
+            }
+        }
+        for (void** it = m_begin; it < m_end; ++it) {
+            void* m = *it;
+            if (!m) continue;
+            float my = field<float>(m, 0x44);
+            if (std::fabs(my - target_y) < 48.0f) {
+                float mx = field<float>(m, 0x40);
+                float dx = std::fabs(mx - cx);
+                if (dx < min_clear) min_clear = dx;
+            }
+        }
+        if (field<int>(game, offsets::kThemeId) == 0xd) {
+            void** s_begin = field<void**>(game, offsets::kSpecialsBegin);
+            void** s_end   = field<void**>(game, offsets::kSpecialsEnd);
+            for (void** it = s_begin; it < s_end; ++it) {
+                void* s = *it;
+                if (!s) continue;
+                float sx = field<float>(s, 0x28);
+                float sy = field<float>(s, 0x2c);
+                if (sx >= -20.0f && sx <= 340.0f && std::fabs(sy - target_y) < 36.0f) {
+                    float dx = std::fabs(sx - cx);
+                    if (dx < min_clear) min_clear = dx;
+                }
+            }
+        }
+
+        if (min_clear >= 76.0f) {
+            return cx; // completely clear!
+        }
+        if (min_clear > best_clearance) {
+            best_clearance = min_clear;
+            best_x = cx;
+        }
+    }
+    return best_x;
 }
 
 static void* pop_platform_from_pool(void* game) {
@@ -298,8 +362,8 @@ static void* pop_platform_from_pool(void* game) {
 }
 
 // Guarantees no unpassable vertical gap (> 130 units; max jump height is ~168)
-// between consecutive landable platforms after falling back down, using up
-// disappearing/spring platforms, or restoring history.
+// between consecutive landable platforms, and keeps the top of the screen populated
+// so platforms appear smoothly at the top edge instead of popping in mid-screen.
 static void ensure_reachable_gaps(void* game) {
     auto*& pool_b = field<void**>(game, offsets::kPoolBegin);
     auto*& pool_e = field<void**>(game, offsets::kPoolEnd);
@@ -324,7 +388,22 @@ static void ensure_reachable_gaps(void* game) {
             solid_y[n_solid++] = py;
         }
     }
-    if (n_solid < 2) return;
+    // Also count Winter theme's landable icicle platforms (game+0x7638, x=+0x28, y=+0x2c)
+    // so we never spawn extra normal platforms on top of icicle platform waves.
+    if (field<int>(game, offsets::kThemeId) == 0xd) {
+        void** s_begin = field<void**>(game, offsets::kSpecialsBegin);
+        void** s_end   = field<void**>(game, offsets::kSpecialsEnd);
+        for (void** it = s_begin; it < s_end && n_solid < 64; ++it) {
+            void* s = *it;
+            if (!s) continue;
+            float sx = field<float>(s, 0x28);
+            float sy = field<float>(s, 0x2c);
+            if (sx >= -20.0f && sx <= 340.0f && sy >= -10.0f && sy <= screen_top + 120.0f) {
+                solid_y[n_solid++] = sy;
+            }
+        }
+    }
+    if (n_solid < 1) return;
     std::sort(solid_y, solid_y + n_solid);
 
     int added = 0;
@@ -343,7 +422,7 @@ static void ensure_reachable_gaps(void* game) {
                 float new_y = y0 + gap * (static_cast<float>(k) / static_cast<float>(pieces + 1));
                 fn_platformReset(p);
                 fn_platformSetType(p, 0);
-                field<float>(p, offsets::kPlatX)         = next_rand_x();
+                field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
                 field<float>(p, offsets::kPlatY)         = new_y;
                 field<int>(p, offsets::kPlatMoveMode)    = 0;
                 field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
@@ -351,6 +430,24 @@ static void ensure_reachable_gaps(void* game) {
                 added++;
             }
         }
+    }
+
+    // Keep the top edge populated when a pre-scripted pattern ends well below screen_top,
+    // so bridging platforms scroll in naturally from the top instead of popping in mid-screen.
+    float top_y = solid_y[n_solid - 1];
+    while (top_y < screen_top - 115.0f && added < 4 && (pool_e - pool_b) > 12) {
+        void* p = pop_platform_from_pool(game);
+        if (!p) break;
+        float new_y = top_y + 100.0f;
+        fn_platformReset(p);
+        fn_platformSetType(p, 0);
+        field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
+        field<float>(p, offsets::kPlatY)         = new_y;
+        field<int>(p, offsets::kPlatMoveMode)    = 0;
+        field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
+        insert_platform_sorted(game, p);
+        top_y = new_y;
+        added++;
     }
 }
 
@@ -499,7 +596,7 @@ static void scroll_down_with_history(void* game, float scroll_down) {
             float new_y = std::max(0.0f, min_y - 90.0f);
             fn_platformReset(p);
             fn_platformSetType(p, 0); // solid normal platform
-            field<float>(p, offsets::kPlatX)         = next_rand_x();
+            field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
             field<float>(p, offsets::kPlatY)         = new_y;
             field<int>(p, offsets::kPlatMoveMode)    = 0;
             field<float>(p, offsets::kPlatMoveSpeed) = 0.0f;
