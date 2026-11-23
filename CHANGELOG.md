@@ -1,3 +1,9 @@
+## [1.6.0](https://github.com/Darkaxt/morphe-patches/compare/v1.5.0...v1.6.0) (2026-11-23)
+
+### ✨ New Features
+
+* **thelonging:** replace global CanvasScaler patch with 4 targeted 4:3/foldable patches ([dc23ff3](https://github.com/Darkaxt/morphe-patches/commit/dc23ff3d4b2827a02aa1189709e79bbcc766859f))
+
 ## [1.5.0](https://github.com/Darkaxt/morphe-patches/compare/v1.4.3...v1.5.0) (2026-11-23)
 
 ### ✨ New Features
