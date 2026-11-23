@@ -487,8 +487,12 @@ static void hook_updateGameplay(void* game) {
     int is_playing   = field<int>(game, offsets::kIsPlaying);
     int falling_dead = field<int>(game, offsets::kIsFallingDead);
     int black_hole   = field<int>(game, offsets::kIsBlackHole);
+    int hit_hazard   = field<int>(game, offsets::kIsHitMonsterDizzy) |
+                       field<int>(game, offsets::kIsAbductedUFO) |
+                       field<int>(game, offsets::kIsHitOtherHazard);
 
-    if (phase == 6 && is_playing == 1 && falling_dead == 0 && black_hole == 0 && !g_gameOverArmed) {
+    if (phase == 6 && is_playing == 1 && falling_dead == 0 && black_hole == 0 &&
+        hit_hazard == 0 && g_lives > 0 && !g_gameOverArmed) {
         float& dy = field<float>(game, offsets::kDoodlerY);
         float& vy = field<float>(game, offsets::kDoodlerVy);
         float& wy = field<float>(game, offsets::kWorldY);
@@ -626,6 +630,9 @@ static void hook_checkCollisions(void* game) {
         g_lifeRecoverTarget = cur_score + static_cast<float>(kLifeRecoverStep);
         g_invulnTimer = kInvulnDuration;
         cancel_ko();
+    } else {
+        // Out of lives: disarm Endless Fall immediately so vanilla KO ends the run right away
+        g_gameOverArmed = true;
     }
 }
 
@@ -659,7 +666,7 @@ static void hook_renderHUD(void* game, int flag) {
         hud_draw::render_overlay(
             g_lives, kMaxLives, static_cast<int>(g_peakScore),
             screen_left, screen_width, screen_h, top_inset,
-            g_invulnTimer, g_damageFlash, doodler_sprite);
+            g_invulnTimer, g_damageFlash, doodler_sprite, g_extraX);
     }
 }
 

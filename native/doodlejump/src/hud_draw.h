@@ -130,8 +130,8 @@ inline bool draw_themed_doodler(const void* sprite, float cx, float cy,
     };
     const auto* uvs = reinterpret_cast<const GLfloat*>(p + 0x30);
 
-    GLint prev_env = GL_REPLACE;
-    glGetTexEnviv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, &prev_env);
+    GLint prev_tex = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex);
 
     glEnable(GL_TEXTURE_2D);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -149,7 +149,8 @@ inline bool draw_themed_doodler(const void* sprite, float cx, float cy,
     glVertexPointer(2, GL_FLOAT, 0, verts);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, prev_env);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prev_tex));
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisable(GL_TEXTURE_2D);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -160,7 +161,8 @@ inline void render_overlay(int lives, int max_lives, int peak_score,
                            float screen_left, float screen_width,
                            float screen_height, float top_inset,
                            float invuln_timer, float damage_flash,
-                           const void* doodler_sprite = nullptr) {
+                           const void* doodler_sprite = nullptr,
+                           float extra_x = 0.0f) {
     // Save GLES 1.1 state we touch
     GLboolean tex_enabled = glIsEnabled(GL_TEXTURE_2D);
     GLboolean blend_enabled = glIsEnabled(GL_BLEND);
@@ -171,11 +173,12 @@ inline void render_overlay(int lives, int max_lives, int peak_score,
     glEnableClientState(GL_VERTEX_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
-    // Subtle red edge flash when taking fall or monster damage
+    // Subtle red full-viewport flash when taking fall or monster damage
     if (damage_flash > 0.0f) {
-        float a = damage_flash * 0.45f;
-        if (a > 0.35f) a = 0.35f;
-        draw_rect(screen_left, 0.0f, screen_width, screen_height, 0.95f, 0.12f, 0.12f, a);
+        float a = damage_flash * 0.38f;
+        if (a > 0.25f) a = 0.25f;
+        draw_rect(screen_left - extra_x, 0.0f, screen_width + extra_x * 2.0f, screen_height,
+                  0.95f, 0.12f, 0.12f, a);
     }
 
     // Place lives + peak score cleanly inside the vanilla top HUD bar (between score and pause)
