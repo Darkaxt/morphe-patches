@@ -1,3 +1,9 @@
+## [1.3.2](https://github.com/Darkaxt/morphe-patches/compare/v1.3.1...v1.3.2) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** end run immediately at 0 lives on monster/UFO KO and restore GLES texture/env state ([a575b96](https://github.com/Darkaxt/morphe-patches/commit/a575b96d21120da730fc7871f8666a522d653ff1))
+
 ## [1.3.1](https://github.com/Darkaxt/morphe-patches/compare/v1.3.0...v1.3.1) (2026-11-23)
 
 ### 🐛 Bug Fixes
