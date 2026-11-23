@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/Darkaxt/morphe-patches/compare/v1.3.7...v1.4.0) (2026-11-23)
+
+### ✨ New Features
+
+* **doodlejump:** use single-use disappearing platforms (type 3) for injected gap bridges ([56d7233](https://github.com/Darkaxt/morphe-patches/commit/56d723369850a6bec824c076cc1e297158e349dd))
+
 ## [1.3.7](https://github.com/Darkaxt/morphe-patches/compare/v1.3.6...v1.3.7) (2026-11-23)
 
 ### 🐛 Bug Fixes
