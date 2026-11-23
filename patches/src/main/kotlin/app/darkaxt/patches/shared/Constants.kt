@@ -21,4 +21,20 @@ object Constants {
             ),
         ),
     )
+
+    val COMPATIBILITY_THE_LONGING = Compatibility(
+        name = "THE LONGING",
+        packageName = "de.application_systems.TheLonging",
+        apkFileType = ApkFileType.APK,
+        appIconColor = 0x5C4033,
+        targets = listOf(
+            AppTarget(
+                version = "1.26",
+                versionCodes = mapOf(
+                    SupportedAbi.ARM64_V8A to 274,
+                ),
+                minSdk = 29,
+            ),
+        ),
+    )
 }
