@@ -421,6 +421,9 @@ static void ensure_reachable_gaps(void* game) {
         int type   = field<int>(p, offsets::kPlatType);
         int broken = field<int>(p, offsets::kPlatBroken);
         if (type == 2 || broken != 0) continue;
+        // Skip fully vanished single-use (type 3) platforms; keep them counted while still fading
+        // so we don't spawn a duplicate right on top of one you just bounced off.
+        if (type == 3 && field<float>(p, 0x58) <= 0.05f) continue;
         float py = field<float>(p, offsets::kPlatY);
         if (py >= -10.0f && py <= screen_top + 120.0f) {
             solid_y[n_solid++] = py;
@@ -460,7 +463,7 @@ static void ensure_reachable_gaps(void* game) {
                 if (!p) break;
                 float new_y = y0 + gap * (static_cast<float>(k) / static_cast<float>(pieces + 1));
                 fn_platformReset(p);
-                fn_platformSetType(p, 0);
+                fn_platformSetType(p, 3); // single-use disappearing platform
                 field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
                 field<float>(p, offsets::kPlatY)         = new_y;
                 field<int>(p, offsets::kPlatMoveMode)    = 0;
@@ -479,7 +482,7 @@ static void ensure_reachable_gaps(void* game) {
         if (!p) break;
         float new_y = top_y + 100.0f;
         fn_platformReset(p);
-        fn_platformSetType(p, 0);
+        fn_platformSetType(p, 3); // single-use disappearing platform
         field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
         field<float>(p, offsets::kPlatY)         = new_y;
         field<int>(p, offsets::kPlatMoveMode)    = 0;
@@ -634,7 +637,7 @@ static void scroll_down_with_history(void* game, float scroll_down) {
             if (!p) break;
             float new_y = std::max(0.0f, min_y - 90.0f);
             fn_platformReset(p);
-            fn_platformSetType(p, 0); // solid normal platform
+            fn_platformSetType(p, 3); // single-use disappearing platform
             field<float>(p, offsets::kPlatX)         = pick_non_overlapping_x(game, new_y);
             field<float>(p, offsets::kPlatY)         = new_y;
             field<int>(p, offsets::kPlatMoveMode)    = 0;
@@ -701,6 +704,7 @@ static void hook_cullOffscreen(void* game) {
         int type = field<int>(p, offsets::kPlatType);
         int broken = field<int>(p, offsets::kPlatBroken);
         if (type == 2 && broken != 0) continue;
+        if (type == 3 && field<int>(p, 0x5c) != 0) continue; // don't save already-used single-use platforms
 
         SavedPlatform sp;
         sp.worldY    = cur_world_y + py;
