@@ -1,3 +1,9 @@
+## [1.4.1](https://github.com/Darkaxt/morphe-patches/compare/v1.4.0...v1.4.1) (2026-11-23)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** skip bridging below Doodler while climbing and animate injected platforms with native fade-in ([29e71d4](https://github.com/Darkaxt/morphe-patches/commit/29e71d49f9dc6d1628fff25ac94987e0938b7f5c))
+
 ## [1.4.0](https://github.com/Darkaxt/morphe-patches/compare/v1.3.7...v1.4.0) (2026-11-23)
 
 ### ✨ New Features
