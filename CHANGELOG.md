@@ -1,3 +1,9 @@
+## [1.6.1](https://github.com/Darkaxt/morphe-patches/compare/v1.6.0...v1.6.1) (2026-11-25)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** persist off-screen bonuses/monsters/UFOs/black holes and mute off-screen hazard sounds ([219aadb](https://github.com/Darkaxt/morphe-patches/commit/219aadb872d0cb77a1dc064784c6a6014f97bebc))
+
 ## [1.6.0](https://github.com/Darkaxt/morphe-patches/compare/v1.5.0...v1.6.0) (2026-11-23)
 
 ### ✨ New Features
