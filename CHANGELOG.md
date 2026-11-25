@@ -1,3 +1,9 @@
+## [1.6.2](https://github.com/Darkaxt/morphe-patches/compare/v1.6.1...v1.6.2) (2026-11-25)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** fix empty-pool check that disabled off-screen entity persistence ([821e6aa](https://github.com/Darkaxt/morphe-patches/commit/821e6aa49faef686897627f7692c0ad70c939afd))
+
 ## [1.6.1](https://github.com/Darkaxt/morphe-patches/compare/v1.6.0...v1.6.1) (2026-11-25)
 
 ### 🐛 Bug Fixes
