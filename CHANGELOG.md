@@ -1,3 +1,9 @@
+## [1.6.4](https://github.com/Darkaxt/morphe-patches/compare/v1.6.3...v1.6.4) (2026-11-28)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** lives HUD shows the current theme's and costume's Doodler ([d0cd785](https://github.com/Darkaxt/morphe-patches/commit/d0cd7855ca6a97360d9a714bd0e325ba9a3b8203))
+
 ## [1.6.3](https://github.com/Darkaxt/morphe-patches/compare/v1.6.2...v1.6.3) (2026-11-28)
 
 ### 🐛 Bug Fixes
