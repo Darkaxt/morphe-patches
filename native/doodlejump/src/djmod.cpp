@@ -97,6 +97,7 @@ constexpr uintptr_t kTriggerGameOver   = 0x2fb658;
 constexpr uintptr_t kCheckCollisions   = 0x2fbeb0;
 constexpr uintptr_t kRenderWorld       = 0x305d20;
 constexpr uintptr_t kRenderHUD         = 0x30d6ac;
+constexpr uintptr_t kDrawSprite        = 0x34ca2c; // (sprite, w1, flipX, x, y): binds sprite+0 and draws one textured quad
 constexpr uintptr_t kCullOffscreen     = 0x30eeb4;
 constexpr uintptr_t kSetupScreen       = 0x33c83c;
 constexpr uintptr_t kAudioPlay         = 0x343920;
@@ -214,6 +215,7 @@ struct Vec2 {
 
 // Endless Fall & 3-Lives state
 static std::vector<SavedPlatform> g_belowScreen;
+static const void* g_doodlerSprite = nullptr;  // sprite renderWorld last drew for the Doodler
 static int   g_lives             = kMaxLives;
 static float g_lifeRecoverTarget = 0.0f;
 static float g_peakScore         = 0.0f;
@@ -850,6 +852,7 @@ static void apply_fall_damage(void* game, int dmg) {
 }
 
 static void hook_resetLevel(void* game) {
+    g_doodlerSprite = nullptr;
     g_belowScreen.clear();  // extra platforms persist: the game object (ctor at 0x33cc90) lives for the whole app session
     g_lives             = kMaxLives;
     g_lifeRecoverTarget = 0.0f;
@@ -1239,6 +1242,36 @@ static void hook_triggerGameOver(void* game) {
     orig_triggerGameOver(game);
 }
 
+// The Doodler is drawn by renderWorld through drawSprite from a few call sites that pick the
+// sprite by theme, costume and pose (base set at game+0x70c0, costume table at game+0x9010).
+// Remember the sprite it actually drew so the lives HUD shows the same skin.
+using DrawSpriteFn = void (*)(const void*, int, int, float, float);
+static DrawSpriteFn orig_drawSprite = nullptr;
+static const uintptr_t kDoodlerDrawReturns[] = {0x308480, 0x3094ec, 0x309880, 0x30bc94, 0x30bce0};
+static void hook_drawSprite(const void* sprite, int a, int flip, float x, float y) {
+    uintptr_t rva = reinterpret_cast<uintptr_t>(__builtin_return_address(0)) - g_base;
+    for (uintptr_t r : kDoodlerDrawReturns) {
+        if (rva == r) { g_doodlerSprite = sprite; break; }
+    }
+#ifdef DJ_DIAG
+    if (rva >= 0x305d20 && rva < 0x30bebc) {
+        static uintptr_t seen[256];
+        static int n_seen = 0;
+        uintptr_t key = (rva << 24) ^ (reinterpret_cast<uintptr_t>(sprite) & 0xffffff);
+        bool found = false;
+        for (int i = 0; i < n_seen; ++i) if (seen[i] == key) { found = true; break; }
+        if (!found && n_seen < 256 && sprite) {
+            seen[n_seen++] = key;
+            const auto* p = static_cast<const uint8_t*>(sprite);
+            __android_log_print(ANDROID_LOG_INFO, "DJDiag", "DOODLER caller=0x%lx sprite=%p tex=%u hw=%.1f hh=%.1f",
+                                (unsigned long)rva, sprite, *reinterpret_cast<const unsigned*>(p),
+                                *reinterpret_cast<const float*>(p + 0x28), *reinterpret_cast<const float*>(p + 0x2c));
+        }
+    }
+#endif
+    orig_drawSprite(sprite, a, flip, x, y);
+}
+
 static void hook_renderHUD(void* game, int flag) {
     orig_renderHUD(game, flag);
 
@@ -1257,6 +1290,7 @@ static void hook_renderHUD(void* game, int flag) {
             doodler_sprite = sprite_table[1] ? sprite_table[1] : sprite_table[0];
         }
         if (!doodler_sprite) doodler_sprite = field<void*>(game, 0x70c0);
+        if (g_doodlerSprite) doodler_sprite = g_doodlerSprite;  // what renderWorld actually drew this frame
 
         hud_draw::render_overlay(
             g_lives, kMaxLives, static_cast<int>(g_peakScore),
@@ -1453,6 +1487,7 @@ static void djmod_init() {
         ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kCullOffscreen),   hook_cullOffscreen,   &orig_cullOffscreen);
         ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kCheckCollisions), hook_checkCollisions, &orig_checkCollisions);
         ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kRenderHUD),       hook_renderHUD,       &orig_renderHUD);
+        ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kDrawSprite),      hook_drawSprite,      &orig_drawSprite);
         ok &= arm64_hook::install(reinterpret_cast<void*>(g_base + offsets::kTriggerGameOver), hook_triggerGameOver, &orig_triggerGameOver);
     }
 
