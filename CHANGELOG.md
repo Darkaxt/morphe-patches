@@ -1,3 +1,9 @@
+## [1.6.3](https://github.com/Darkaxt/morphe-patches/compare/v1.6.2...v1.6.3) (2026-11-28)
+
+### 🐛 Bug Fixes
+
+* **doodlejump:** keep springs and other items with their platform below the screen ([add00f9](https://github.com/Darkaxt/morphe-patches/commit/add00f9b4e3113ade8c3c1bfef2afa51e12bde86))
+
 ## [1.6.2](https://github.com/Darkaxt/morphe-patches/compare/v1.6.1...v1.6.2) (2026-11-25)
 
 ### 🐛 Bug Fixes
