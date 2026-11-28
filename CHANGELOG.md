@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/Darkaxt/morphe-patches/compare/v1.6.4...v1.7.0) (2026-11-28)
+
+### ✨ New Features
+
+* **doodlejump:** GmsCore support patch ([fdd2f36](https://github.com/Darkaxt/morphe-patches/commit/fdd2f36881fd4fc654b198da35beba8e3b718f85))
+
 ## [1.6.4](https://github.com/Darkaxt/morphe-patches/compare/v1.6.3...v1.6.4) (2026-11-28)
 
 ### 🐛 Bug Fixes
